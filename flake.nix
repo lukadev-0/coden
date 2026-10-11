@@ -116,10 +116,29 @@
           configfile = ./microvm-kernel.config;
         };
 
+      coden =
+        { rustPlatform }:
+        rustPlatform.buildRustPackage {
+          pname = "coden";
+          version = "0.0.0";
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              ./Cargo.lock
+              ./Cargo.toml
+              ./src
+            ];
+          };
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+        };
+
       overlay = final: _: {
         firecracker = final.callPackage firecracker { };
         rootfs = final.callPackage rootfs { };
         microvm-kernel = final.callPackage microvm-kernel { };
+        coden = final.callPackage coden { };
       };
 
       systems = [
@@ -145,7 +164,31 @@
 
       packages = forEachSystem (
         { pkgs, ... }: {
-          inherit (pkgs) microvm-kernel;
+          inherit (pkgs)
+            microvm-kernel
+            firecracker
+            rootfs
+            coden
+            ;
+          coden-docker = pkgs.dockerTools.streamLayeredImage {
+            name = "coden";
+            contents = pkgs.pkgsStatic.coden;
+            extraCommands = ''
+              cp ${pkgs.rootfs} rootfs
+              cp ${pkgs.microvm-kernel.dev}/vmlinux vmlinux
+              mkdir tmp
+            '';
+            config = {
+              Env = [
+                "VMLINUX=/vmlinux"
+                "ROOTFS=/rootfs"
+                "FIRECRACKER=${lib.getExe' pkgs.firecracker "firecracker"}"
+                "FIRECRACKER_JAILER=${lib.getExe' pkgs.firecracker "jailer"}"
+              ];
+              Entrypoint = [ "/bin/coden" ];
+            };
+          };
+          default = pkgs.coden;
         }
       );
 
