@@ -5,6 +5,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Serialize;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::SetOnce;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -265,7 +266,7 @@ impl Manager {
             .await
             .context("failed to write Firecracker config file")?;
 
-        let child = Command::new(&self.firecracker_jailer)
+        let mut child = Command::new(&self.firecracker_jailer)
             .arg("--id")
             .arg(&machine_id)
             .arg("--exec-file")
@@ -281,41 +282,68 @@ impl Manager {
             .arg("--config-file")
             .arg("fc-config.json")
             .kill_on_drop(true)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null())
             .spawn()
             .context("failed to spawn Firecracker jailer")?;
 
-        let exited = Arc::new(SetOnce::new());
+        let span = info_span!(parent: None, "machine", machine_id);
+
+        tokio::spawn({
+            let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+            let mut stderr = BufReader::new(child.stderr.take().unwrap()).lines();
+            async move {
+                loop {
+                    let line = tokio::select! {
+                        Ok(Some(line)) = stdout.next_line() => line,
+                        Ok(Some(line)) = stderr.next_line() => line,
+                        else => break,
+                    }
+                    .replace('\r', "");
+                    debug!("{line}");
+                }
+            }
+            .instrument(info_span!(parent: &span, "firecracker"))
+        });
+
         let cancel = self.cancel.child_token();
 
         std::mem::forget(machine_dir_guard);
 
-        self.tasks.spawn(
-            Machine::run_actor(cancel.clone(), exited.clone(), machine_dir, child)
-                .instrument(info_span!(parent: None, "machine", machine_id)),
-        );
+        let tasks = TaskTracker::new();
+        tasks
+            .spawn(Machine::run_actor(cancel.clone(), machine_dir, child).instrument(span.clone()));
+        tasks.close();
 
-        Ok(Machine { exited, cancel })
+        let machine = Machine { tasks, cancel };
+
+        self.tasks.spawn({
+            let machine = machine.clone();
+            async move {
+                machine.wait().await;
+                info!("finished");
+            }
+            .instrument(span)
+        });
+        Ok(machine)
     }
 }
 
+#[derive(Clone)]
 pub struct Machine {
-    exited: Arc<SetOnce<()>>,
+    tasks: TaskTracker,
     cancel: CancellationToken,
 }
 
 impl Machine {
-    async fn run_actor(
-        cancel: CancellationToken,
-        exited: Arc<SetOnce<()>>,
-        machine_dir: PathBuf,
-        mut child: Child,
-    ) {
+    async fn run_actor(cancel: CancellationToken, machine_dir: PathBuf, mut child: Child) {
+        let mut did_kill = false;
         loop {
             tokio::select! {
-                _ = cancel.cancelled() => {
+                _ = cancel.cancelled(), if !did_kill => {
+                    did_kill = true;
+                    info!("cancel requested; killing VM");
                     _ = child.start_kill();
                 }
                 exit_status = child.wait() => {
@@ -332,8 +360,6 @@ impl Machine {
         if let Err(e) = tokio::fs::remove_dir_all(&machine_dir).await {
             error!(err = ?e, machine_dir = %machine_dir.display(), "failed to remove VM directory");
         }
-
-        _ = exited.set(());
     }
 
     pub fn request_stop(&self) {
@@ -341,6 +367,6 @@ impl Machine {
     }
 
     pub async fn wait(&self) {
-        self.exited.wait().await;
+        self.tasks.wait().await;
     }
 }

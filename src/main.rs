@@ -1,8 +1,9 @@
 use std::env;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use coden::vm::{MachineConfig, ManagerOptions};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,10 +33,12 @@ async fn main() -> Result<()> {
         mem_size_mib: 20,
     };
 
-    let machine = manager.spawn(&machine_config).await?;
-    machine.wait().await;
+    manager.spawn(&machine_config).await?;
 
+    tokio::signal::ctrl_c().await?;
+    info!("shutting down");
     manager.shutdown().await?;
+    info!("shut down");
 
     Ok(())
 }
