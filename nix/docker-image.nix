@@ -21,6 +21,6 @@ dockerTools.streamLayeredImage {
       "FIRECRACKER=${lib.getExe' firecracker "firecracker"}"
       "FIRECRACKER_JAILER=${lib.getExe' firecracker "jailer"}"
     ];
-    Entrypoint = [ "/bin/coden" ];
+    Entrypoint = [ "/bin/coden-server" ];
   };
 }
