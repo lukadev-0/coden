@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::{Ok, Result};
-use coden::vm::{MachineConfig, ManagerOptions};
+use coden_server::vm::{MachineConfig, Manager, ManagerOptions};
 use tracing::info;
 
 #[tokio::main]
@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         firecracker: PathBuf::from(firecracker),
         firecracker_jailer: PathBuf::from(firecracker_jailer),
     };
-    let manager = coden::vm::Manager::new(&manager_options).await?;
+    let manager = Manager::new(&manager_options).await?;
 
     let vmlinux = manager.load_resource("vmlinux", vmlinux).await?;
     let rootfs = manager.load_resource("rootfs", rootfs).await?;
