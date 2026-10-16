@@ -40,6 +40,7 @@ environment variables:
 - `FIRECRACKER_JAILER` - path to the `jailer` executable (comes with Firecracker)
 
 You can download the server binary from the [releases](https://github.com/lukadev-0/coden/releases).
+It is recommended to set `RUST_LOG=debug`.
 
 ## Future Plans
 
