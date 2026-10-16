@@ -39,6 +39,8 @@ environment variables:
 - `FIRECRACKER` - path to the `firecracker` executable
 - `FIRECRACKER_JAILER` - path to the `jailer` executable (comes with Firecracker)
 
+You can download the server binary from the [releases](https://github.com/lukadev-0/coden/releases).
+
 ## Future Plans
 
 Integrate this into a website with a code editor to let users write & run code
