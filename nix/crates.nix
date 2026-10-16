@@ -13,31 +13,48 @@ let
 
   cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
-  crateArgs =
-    crate:
-    let
-      src = lib.fileset.toSource {
-        root = ../.;
-        fileset = lib.fileset.unions [
-          ../Cargo.toml
-          ../Cargo.lock
-          (craneLib.fileset.commonCargoSources crate)
-        ];
-      };
-      inherit (craneLib.crateNameFromCargoToml { src = crate; }) pname version;
-    in
-    commonArgs
-    // {
-      inherit
-        cargoArtifacts
-        pname
-        version
-        src
-        ;
-      cargoExtraArgs = "-p ${pname}";
-    };
+  buildPackage =
+    {
+      crate,
+      extraCrates ? [ ],
+    }@args:
+    craneLib.buildPackage (
+      let
+        src = lib.fileset.toSource {
+          root = ../.;
+          fileset = lib.fileset.unions (
+            [
+              ../Cargo.toml
+              ../Cargo.lock
+            ]
+            ++ lib.map craneLib.fileset.commonCargoSources ([ crate ] ++ extraCrates)
+          );
+        };
+        inherit (craneLib.crateNameFromCargoToml { src = crate; }) pname version;
+      in
+      commonArgs
+      // {
+        inherit
+          cargoArtifacts
+          pname
+          version
+          src
+          ;
+        cargoExtraArgs = "-p ${pname}";
+      }
+      // lib.removeAttrs args [
+        "crate"
+        "extraCrates"
+      ]
+    );
 in
 {
-  coden-server = craneLib.buildPackage (crateArgs ../crates/coden-server);
-  coden-agent = craneLib.buildPackage (crateArgs ../crates/coden-agent);
+  coden-server = buildPackage {
+    crate = ../crates/coden-server;
+    extraCrates = [ ../crates/coden-agent-api ];
+  };
+  coden-agent = buildPackage {
+    crate = ../crates/coden-agent;
+    extraCrates = [ ../crates/coden-agent-api ];
+  };
 }

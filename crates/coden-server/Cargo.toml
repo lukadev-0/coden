@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+coden-agent-api.workspace = true
+
 anyhow.workspace = true
 rand.workspace = true
 serde.workspace = true
