@@ -57,6 +57,7 @@
             rootfs
             microvm-kernel
             coden-server-docker-stream
+            coden-server-unwrapped
             coden-server
             coden-agent
             ;
