@@ -17,7 +17,6 @@ docker run -it --rm \
     --device /dev/kvm \
     --cap-add SYS_ADMIN \
     --security-opt seccomp=unconfined \
-    -e RUST_LOG=debug \
     ghcr.io/lukadev-0/coden
 ```
 
@@ -26,21 +25,24 @@ required environment variables. After installing Nix, you can run it like this:
 ```sh
 nix develop
 nix build .#coden-server
-sudo -E RUST_LOG=debug ./result/bin/coden-server
+sudo -E ./result/bin/coden-server
 ```
 
 You can also acquire the required files manually, refer to
 [Firecracker's documentation](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md)
-for how to get a copy of the Linux kernel and a rootfs image. Then, set these
-environment variables:
+for how to download Firecracker and get a copy of the Linux kernel. Head to the
+[releases](https://github.com/lukadev-0/coden/releases) to download the
+`coden-server` binary and the `rootfs`.
 
-- `VMLINUX` - path to the uncompressed Linux kernel
-- `ROOTFS` - path to the rootfs image
-- `FIRECRACKER` - path to the `firecracker` executable
-- `FIRECRACKER_JAILER` - path to the `jailer` executable (comes with Firecracker)
+```sh
+sudo VMLINUX=<vmlinux> ROOTFS=<rootfs> FIRECRACKER=<firecracker> FIRECRACKER_JAILER=<jailer> \
+    ./coden-server
+```
 
-You can download the server binary from the [releases](https://github.com/lukadev-0/coden/releases).
-It is recommended to set `RUST_LOG=debug`.
+- `<vmlinux>` is the path to the uncompressed Linux kernel
+- `<rootfs>` is the path to the rootfs image
+- `<firecracker>` is the path to the `firecracker` executable
+- `<jailer>` is the path to the `jailer` executable (comes with Firecracker)
 
 ## Future Plans
 

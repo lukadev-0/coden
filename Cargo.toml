@@ -8,6 +8,8 @@ repository = "https://github.com/lukadev-0/coden"
 license = "AGPL-3.0-only"
 
 [workspace.dependencies]
+workspace-hack = { path = "./crates/workspace-hack" }
+
 coden-agent-api = { path = "./crates/coden-agent-api" }
 
 anyhow = "1.0.104"

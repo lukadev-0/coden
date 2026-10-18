@@ -28,6 +28,12 @@
           targets = [ "x86_64-unknown-linux-musl" ];
         };
 
+      mkPackages =
+        pkgs:
+        import ./nix {
+          craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+        } pkgs;
+
       systems = [ "x86_64-linux" ];
       forEachSystem =
         f:
@@ -36,17 +42,13 @@
           f system (
             import nixpkgs {
               inherit system;
-              overlays = [ self.overlays.default ];
+              overlays = [ (final: _: mkPackages final) ];
             }
           )
         );
     in
     {
-      overlays.default =
-        final: _:
-        import ./nix {
-          craneLib = (crane.mkLib final).overrideToolchain rustToolchain;
-        } final;
+      overlays.default = final: _: lib.removeAttrs (mkPackages final) [ "coden-cargo-checks" ];
 
       packages = forEachSystem (
         system: pkgs: {
@@ -62,14 +64,24 @@
         }
       );
 
+      checks = forEachSystem (
+        system: pkgs:
+        lib.removeAttrs (self.packages.${system}) [ "default" ]
+        // lib.mapAttrs' (name: value: {
+          name = "coden-cargo-check-${name}";
+          inherit value;
+        }) (lib.filterAttrs (_: lib.isDerivation) pkgs.coden-cargo-checks)
+      );
+
       devShells = forEachSystem (
         system: pkgs: {
           default = pkgs.mkShell {
             packages = [
               (rustToolchain pkgs)
               pkgs.firecracker
+              pkgs.cargo-hakari
             ];
-            VMLINUX = "${pkgs.microvm-kernel.dev}/vmlinux";
+            VMLINUX = pkgs.microvm-kernel;
             ROOTFS = pkgs.rootfs;
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";

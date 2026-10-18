@@ -5,7 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-coden-agent-api.workspace = true
+workspace-hack.workspace = true
+
+coden-agent-api = { workspace = true, features = ["client"] }
 
 anyhow.workspace = true
 rand.workspace = true

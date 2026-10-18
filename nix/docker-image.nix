@@ -4,20 +4,18 @@
   rootfs,
   microvm-kernel,
   firecracker,
-  coden-server,
+  coden-server-unwrapped,
 }:
 dockerTools.streamLayeredImage {
   name = "coden";
-  contents = coden-server;
+  contents = coden-server-unwrapped;
   extraCommands = ''
-    cp ${rootfs} rootfs
-    cp ${microvm-kernel.dev}/vmlinux vmlinux
     mkdir tmp
   '';
   config = {
     Env = [
-      "VMLINUX=/vmlinux"
-      "ROOTFS=/rootfs"
+      "VMLINUX=${microvm-kernel}"
+      "ROOTFS=${rootfs}"
       "FIRECRACKER=${lib.getExe' firecracker "firecracker"}"
       "FIRECRACKER_JAILER=${lib.getExe' firecracker "jailer"}"
     ];

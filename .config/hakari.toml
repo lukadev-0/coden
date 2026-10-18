@@ -1,0 +1,11 @@
+# This file contains settings for `cargo hakari`.
+# See https://docs.rs/cargo-hakari/latest/cargo_hakari/config for a full list of options.
+
+hakari-package = "workspace-hack"
+dep-format-version = "4"
+resolver = "3"
+platforms = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+]
+workspace-hack-line-style = "workspace-dotted"

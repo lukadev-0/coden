@@ -12,28 +12,46 @@ macro_rules! impl_request {
         impl HasResponse for $req {
             type Response = $res;
         }
+        impl From<$req> for Request {
+            fn from(value: $req) -> Request {
+                Request::$variant(value)
+            }
+        }
     };
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
+#[serde(tag = "request", content = "args")]
 pub enum Request {
     Exec(ExecRequest),
 }
 
+impl HasResponse for Request {
+    type Response = serde_json::Value;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ExecRequest {
-    pub command: Vec<String>,
+    pub program: String,
+    pub args: Vec<String>,
 }
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ExecResponse {
     #[serde_as(as = "serde_with::DurationMilliSeconds")]
     pub time: Duration,
-    pub output: Vec<u8>,
+    pub output: String,
+    pub status: ExecResponseStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecResponseStatus {
+    Code(i32),
+    Signal(i32),
+    #[serde(untagged)]
+    Other,
 }
 
 impl_request!(Exec: ExecRequest -> ExecResponse);

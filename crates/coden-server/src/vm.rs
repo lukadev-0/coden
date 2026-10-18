@@ -3,11 +3,17 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use coden_agent_api::client::Client;
+use coden_agent_api::schema::HasResponse;
+use coden_agent_api::{VSOCK_PORT, schema};
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::UnixListener;
+use tokio::net::unix::pipe::pipe;
 use tokio::process::{Child, Command};
-use tokio::sync::SetOnce;
+use tokio::sync::{SetOnce, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{Instrument, debug, error, info, info_span, instrument, warn};
 
@@ -246,6 +252,23 @@ impl Manager {
             .await
             .with_context(|| format!("could not link rootfs '{}'", config.rootfs.0.display()))?;
 
+        let vsock_path = chroot_dir.join(format!("vsock_{VSOCK_PORT}"));
+        let vsock_listener = UnixListener::bind(&vsock_path)
+            .with_context(|| format!("could not bind vsock uds '{}'", vsock_path.display()))?;
+        std::os::unix::fs::chown(
+            &vsock_path,
+            Some(config.jailer_uid),
+            Some(config.jailer_gid),
+        )
+        .with_context(|| {
+            format!(
+                "could not change owner of socket at '{}' to uid {} and gid {}",
+                vsock_path.display(),
+                config.jailer_uid,
+                config.jailer_gid
+            )
+        })?;
+
         let fc_config = serde_json::json!({
             "boot-source": {
                 "kernel_image_path": "kernel",
@@ -257,8 +280,12 @@ impl Manager {
                     "is_root_device": true,
                     "is_read_only": true,
                     "path_on_host": "rootfs",
-                }
+                },
             ],
+            "vsock": {
+                "guest_cid": 3,
+                "uds_path": "vsock",
+            },
         });
         let fc_config_json =
             serde_json::to_string(&fc_config).context("failed to encode Firecracker config")?;
@@ -266,7 +293,25 @@ impl Manager {
             .await
             .context("failed to write Firecracker config file")?;
 
-        let mut child = Command::new(&self.firecracker_jailer)
+        let span = info_span!(parent: None, "machine", machine_id);
+        let tasks = TaskTracker::new();
+        let cancel = self.cancel.child_token();
+
+        let (stdout_writer, output_reader) = pipe()?;
+        let stdout_writer = stdout_writer.into_blocking_fd()?;
+        let stderr_writer = stdout_writer.try_clone()?;
+
+        let mut output_lines = BufReader::new(output_reader).lines();
+        tasks.spawn(
+            async move {
+                while let Ok(Some(line)) = output_lines.next_line().await {
+                    debug!("{line}");
+                }
+            }
+            .instrument(info_span!(parent: &span, "firecracker")),
+        );
+
+        let child = Command::new(&self.firecracker_jailer)
             .arg("--id")
             .arg(&machine_id)
             .arg("--exec-file")
@@ -282,50 +327,44 @@ impl Manager {
             .arg("--config-file")
             .arg("fc-config.json")
             .kill_on_drop(true)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(stdout_writer)
+            .stderr(stderr_writer)
             .stdin(Stdio::null())
             .spawn()
             .context("failed to spawn Firecracker jailer")?;
 
-        let span = info_span!(parent: None, "machine", machine_id);
-
-        tokio::spawn({
-            let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
-            let mut stderr = BufReader::new(child.stderr.take().unwrap()).lines();
-            async move {
-                loop {
-                    let line = tokio::select! {
-                        Ok(Some(line)) = stdout.next_line() => line,
-                        Ok(Some(line)) = stderr.next_line() => line,
-                        else => break,
-                    }
-                    .replace('\r', "");
-                    debug!("{line}");
-                }
-            }
-            .instrument(info_span!(parent: &span, "firecracker"))
-        });
-
-        let cancel = self.cancel.child_token();
+        let (cmd_sender, cmd_receiver) = mpsc::channel(1);
+        let ready = Arc::new(SetOnce::new());
 
         std::mem::forget(machine_dir_guard);
-
-        let tasks = TaskTracker::new();
-        tasks
-            .spawn(Machine::run_actor(cancel.clone(), machine_dir, child).instrument(span.clone()));
+        tasks.spawn(
+            Machine::run_actor(
+                cancel.clone(),
+                machine_dir,
+                child,
+                vsock_listener,
+                cmd_receiver,
+                ready.clone(),
+            )
+            .instrument(span.clone()),
+        );
         tasks.close();
 
-        let machine = Machine { tasks, cancel };
+        let machine = Machine {
+            tasks: tasks.clone(),
+            cancel,
+            cmd_sender,
+            ready,
+        };
 
         self.tasks.spawn({
-            let machine = machine.clone();
             async move {
-                machine.wait().await;
+                tasks.wait().await;
                 info!("finished");
             }
             .instrument(span)
         });
+
         Ok(machine)
     }
 }
@@ -334,13 +373,54 @@ impl Manager {
 pub struct Machine {
     tasks: TaskTracker,
     cancel: CancellationToken,
+    cmd_sender: mpsc::Sender<MachineCommand>,
+    ready: Arc<SetOnce<()>>,
+}
+
+struct MachineCommand {
+    request: schema::Request,
+    reply_to: oneshot::Sender<Result<serde_json::Value>>,
 }
 
 impl Machine {
-    async fn run_actor(cancel: CancellationToken, machine_dir: PathBuf, mut child: Child) {
+    async fn run_actor(
+        cancel: CancellationToken,
+        machine_dir: PathBuf,
+        mut child: Child,
+        vsock_listener: UnixListener,
+        mut cmd_receiver: mpsc::Receiver<MachineCommand>,
+        ready: Arc<SetOnce<()>>,
+    ) {
         let mut did_kill = false;
+        let mut agent_client = None;
         loop {
             tokio::select! {
+                res = vsock_listener.accept(), if agent_client.is_none() => {
+                    let (stream, _) = match res {
+                        Ok(res) => res,
+                        Err(e) => {
+                            error!(err = ?e, "failed to accept vsock connection");
+                            continue;
+                        }
+                    };
+
+                    info!("agent connected");
+                    agent_client = Some(Client::new(stream));
+                    _ = ready.set(());
+                }
+                cmd = cmd_receiver.recv(), if agent_client.is_some() => {
+                    let Some(cmd) = cmd else {
+                        if !cancel.is_cancelled() {
+                            debug!("no longer receiving any commands");
+                            cancel.cancel();
+                        }
+                        continue;
+                    };
+                    let agent_client = agent_client.as_mut().unwrap();
+
+                    let res = agent_client.request(&cmd.request).await.context("could not perform request");
+                    _ = cmd.reply_to.send(res);
+                }
                 _ = cancel.cancelled(), if !did_kill => {
                     did_kill = true;
                     info!("cancel requested; killing VM");
@@ -362,11 +442,41 @@ impl Machine {
         }
     }
 
+    pub fn is_ready(&self) -> bool {
+        self.ready.get().is_some()
+    }
+
+    pub async fn ready(&self) {
+        self.ready.wait().await;
+    }
+
     pub fn request_stop(&self) {
         self.cancel.cancel();
     }
 
     pub async fn wait(&self) {
         self.tasks.wait().await;
+    }
+
+    pub async fn request<R>(&self, req: R) -> Result<R::Response>
+    where
+        R: HasResponse + Into<schema::Request> + Serialize,
+        R::Response: DeserializeOwned,
+    {
+        let (reply_sender, reply_receiver) = oneshot::channel();
+        self.cmd_sender
+            .send(MachineCommand {
+                request: req.into(),
+                reply_to: reply_sender,
+            })
+            .await
+            .context("machine closed")?;
+
+        reply_receiver
+            .await
+            .context("no response")?
+            .and_then(|res| {
+                serde_json::from_value::<R::Response>(res).context("could not deserialize response")
+            })
     }
 }

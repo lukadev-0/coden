@@ -10,11 +10,11 @@ where
     let mut start = 0;
     loop {
         if let Some(pos) = buf[start..].iter().position(|&b| b == b'\n') {
-            let line = buf.split_to(pos + 1).freeze();
+            let line = buf.split_to(start + pos + 1).freeze();
             break Ok(Some(line));
         }
 
-        start += buf.remaining();
+        start = buf.remaining();
 
         if reader.read_buf(buf).await? == 0 {
             if buf.is_empty() {

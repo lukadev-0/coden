@@ -1,7 +1,10 @@
+use std::fmt::Debug;
+
 use anyhow::{Context, Result};
 use bytes::BytesMut;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tracing::instrument;
 
 use crate::{io_helpers, schema::HasResponse};
 
@@ -23,19 +26,25 @@ impl<T> Client<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
+    #[instrument(skip(self))]
     pub async fn request<Req>(&mut self, request: &Req) -> Result<Req::Response>
     where
-        Req: HasResponse + Serialize,
-        Req::Response: DeserializeOwned,
+        Req: HasResponse + Debug + Serialize,
+        Req::Response: DeserializeOwned + Debug,
     {
         io_helpers::write_json_line(&mut self.transport, &request)
             .await
             .context("could not send request")?;
 
-        io_helpers::read_json_line(&mut self.transport, &mut self.buf)
+        tracing::debug!("request sent");
+
+        let response = io_helpers::read_json_line(&mut self.transport, &mut self.buf)
             .await
             .context("could not read response")?
-            .context("connection closed")
+            .context("connection closed")?;
+
+        tracing::debug!(?response, "received response");
+        Ok(response)
     }
 }
 

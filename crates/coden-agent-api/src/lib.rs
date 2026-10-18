@@ -1,3 +1,5 @@
+pub const VSOCK_PORT: u32 = 3924;
+
 pub mod schema;
 
 mod io_helpers;

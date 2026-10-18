@@ -8,7 +8,9 @@ pkgs: {
     (pkgs.callPackages ./crates.nix {
       inherit craneLib;
     })
+    coden-server-unwrapped
     coden-server
     coden-agent
+    coden-cargo-checks
     ;
 }

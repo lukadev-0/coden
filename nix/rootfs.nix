@@ -6,21 +6,31 @@
   buildEnv,
   squashfsTools,
   busybox,
+  coden-agent,
 }:
 let
   busybox' = lib.getExe' busybox;
 
-  envPackages = [
-    busybox
-    (writeTextDir "etc/passwd" ''
+  etc = {
+    passwd = ''
       root:x:0:0::/root:${busybox' "nologin"}
       runner:x:1000:1000::/runner:${busybox' "sh"}
-    '')
-    (writeTextDir "etc/group" ''
+    '';
+    group = ''
       root:x:0:root
       runner:x:1000:runner
-    '')
-  ];
+    '';
+    inittab = ''
+      ::ctrlaltdel:${busybox' "reboot"}
+      ::once:${lib.getExe coden-agent}
+      ::restart:${busybox' "init"}
+    '';
+  };
+
+  envPackages = [
+    busybox
+  ]
+  ++ lib.mapAttrsToList (name: contents: writeTextDir "etc/${name}" contents) etc;
 
   rootfsEnv = buildEnv {
     name = "rootfs-env";

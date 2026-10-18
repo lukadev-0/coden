@@ -1,4 +1,13 @@
-{ lib, craneLib }:
+{
+  lib,
+  stdenvNoCC,
+  makeWrapper,
+  craneLib,
+  cargo-hakari,
+  microvm-kernel,
+  rootfs,
+  firecracker,
+}:
 let
   src = craneLib.cleanCargoSource ../.;
 
@@ -17,6 +26,8 @@ let
     {
       crate,
       extraCrates ? [ ],
+      meta ? { },
+      ...
     }@args:
     craneLib.buildPackage (
       let
@@ -27,7 +38,13 @@ let
               ../Cargo.toml
               ../Cargo.lock
             ]
-            ++ lib.map craneLib.fileset.commonCargoSources ([ crate ] ++ extraCrates)
+            ++ lib.map craneLib.fileset.commonCargoSources (
+              [
+                ../crates/workspace-hack
+                crate
+              ]
+              ++ extraCrates
+            )
           );
         };
         inherit (craneLib.crateNameFromCargoToml { src = crate; }) pname version;
@@ -41,20 +58,82 @@ let
           src
           ;
         cargoExtraArgs = "-p ${pname}";
+        meta = {
+          mainProgram = pname;
+        }
+        // meta;
       }
       // lib.removeAttrs args [
         "crate"
         "extraCrates"
+        "meta"
       ]
     );
-in
-{
-  coden-server = buildPackage {
+
+  coden-server-unwrapped = buildPackage {
+    pname = "coden-server-unwrapped";
     crate = ../crates/coden-server;
     extraCrates = [ ../crates/coden-agent-api ];
+    meta.mainProgram = "coden-server";
   };
+in
+{
+  inherit coden-server-unwrapped;
+  coden-server = stdenvNoCC.mkDerivation {
+    pname = "coden-server";
+    inherit (coden-server-unwrapped) version;
+    nativeBuildInputs = [ makeWrapper ];
+    dontUnpack = true;
+    buildPhase = ''
+      mkdir -p "$out/bin"
+      makeWrapper ${lib.getExe coden-server-unwrapped} "$out/bin/coden-server" \
+        --set-default VMLINUX ${microvm-kernel} \
+        --set-default ROOTFS ${rootfs} \
+        --set-default FIRECRACKER ${lib.getExe' firecracker "firecracker"} \
+        --set-default FIRECRACKER_JAILER ${lib.getExe' firecracker "jailer"}
+    '';
+  };
+
   coden-agent = buildPackage {
     crate = ../crates/coden-agent;
     extraCrates = [ ../crates/coden-agent-api ];
+  };
+
+  coden-cargo-checks = {
+    clippy = craneLib.cargoClippy (
+      commonArgs
+      // {
+        inherit cargoArtifacts;
+        cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+      }
+    );
+
+    rustdoc = craneLib.cargoDoc (
+      commonArgs
+      // {
+        inherit cargoArtifacts;
+        env.RUSTDOCFLAGS = "--deny warnings";
+      }
+    );
+
+    fmt = craneLib.cargoFmt (commonArgs // { inherit src; });
+
+    hakari = craneLib.mkCargoDerivation {
+      inherit src;
+      pname = "coden-check-hakari";
+      version = "0.0.0";
+      cargoArtifacts = null;
+      doInstallCargoArtifacts = false;
+
+      buildPhaseCargoCommand = ''
+        cargo hakari generate --diff
+        cargo hakari manage-deps --dry-run
+        cargo hakari verify
+      '';
+
+      nativeBuildInputs = [
+        cargo-hakari
+      ];
+    };
   };
 }

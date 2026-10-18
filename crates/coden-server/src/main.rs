@@ -1,8 +1,10 @@
 use std::env;
 use std::path::PathBuf;
 
-use anyhow::{Ok, Result};
+use anyhow::Result;
+use coden_agent_api::schema;
 use coden_server::vm::{MachineConfig, Manager, ManagerOptions};
+use tokio::sync::mpsc;
 use tracing::info;
 
 #[tokio::main]
@@ -33,12 +35,55 @@ async fn main() -> Result<()> {
         mem_size_mib: 20,
     };
 
-    manager.spawn(&machine_config).await?;
+    eprint!("starting VM... ");
+    let machine = manager.spawn(&machine_config).await?;
+    machine.ready().await;
+    eprintln!("connected!");
 
-    tokio::signal::ctrl_c().await?;
-    info!("shutting down");
-    manager.shutdown().await?;
-    info!("shut down");
+    let (line_sender, mut line_receiver) = mpsc::channel(1);
+    std::thread::spawn(move || {
+        let stdin = std::io::stdin();
+        loop {
+            let mut input = String::new();
+            if stdin.read_line(&mut input).unwrap() == 0 {
+                break;
+            }
+            if line_sender.blocking_send(input).is_err() {
+                break;
+            }
+        }
+    });
+
+    loop {
+        eprint!("> ");
+        tokio::select! {
+            line = line_receiver.recv() => {
+                let Some(line) = line else { break; };
+                let res = machine
+                    .request(schema::ExecRequest {
+                        program: "sh".into(),
+                        args: vec!["-c".into(), line],
+                    })
+                .await?;
+
+                println!("---");
+                println!("took {}ms", res.time.as_millis());
+                match res.status {
+                    schema::ExecResponseStatus::Code(code) => println!("exited with code {code}"),
+                    schema::ExecResponseStatus::Signal(signal) => println!("signal {signal}"),
+                    schema::ExecResponseStatus::Other => {},
+                };
+                println!("---");
+                print!("{}", res.output);
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("shutting down");
+                manager.shutdown().await?;
+                info!("shut down");
+                break;
+            }
+        }
+    }
 
     Ok(())
 }

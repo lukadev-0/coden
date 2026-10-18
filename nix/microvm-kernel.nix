@@ -1,8 +1,14 @@
-{ linux_6_18, linuxManualConfig }:
+{
+  linux_6_18,
+  linuxManualConfig,
+  runCommand,
+}:
 let
-  linux = linux_6_18;
+  linux = linuxManualConfig {
+    inherit (linux_6_18) src version;
+    configfile = ./microvm-kernel.config;
+  };
 in
-linuxManualConfig {
-  inherit (linux) src version;
-  configfile = ./microvm-kernel.config;
-}
+runCommand "microvm-kernel" { } ''
+  cp ${linux.dev}/vmlinux "$out"
+''
