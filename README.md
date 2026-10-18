@@ -6,7 +6,7 @@ An HTTP API for running code within a virtual machine.
 
 - [x] kernel & rootfs
 - [x] spawn a Firecracker microVM
-- [ ] guest agent to accept & execute commands sent by the host
+- [x] guest agent to accept & execute commands sent by the host
 - [ ] HTTP API to spawn a VM and execute the given code
 
 ## How to run?
