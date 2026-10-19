@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use coden_agent_api::schema;
-use coden_server::vm::{MachineConfig, Manager, ManagerOptions};
+use coden_vm::{MachineConfig, Manager, ManagerOptions};
 use tokio::sync::mpsc;
 use tracing::info;
 

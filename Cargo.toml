@@ -11,6 +11,7 @@ license = "AGPL-3.0-only"
 workspace-hack = { path = "./crates/workspace-hack" }
 
 coden-agent-api = { path = "./crates/coden-agent-api" }
+coden-vm = { path = "./crates/coden-vm" }
 
 anyhow = "1.0.104"
 bytes = "1.12.1"

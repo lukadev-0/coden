@@ -73,7 +73,10 @@ let
   coden-server-unwrapped = buildPackage {
     pname = "coden-server-unwrapped";
     crate = ../crates/coden-server;
-    extraCrates = [ ../crates/coden-agent-api ];
+    extraCrates = [
+      ../crates/coden-vm
+      ../crates/coden-agent-api
+    ];
     meta.mainProgram = "coden-server";
   };
 in
