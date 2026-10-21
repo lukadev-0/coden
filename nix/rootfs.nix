@@ -5,8 +5,9 @@
   writeTextDir,
   buildEnv,
   squashfsTools,
-  busybox,
   coden-agent,
+  busybox,
+  gcc,
 }:
 let
   busybox' = lib.getExe' busybox;
@@ -21,14 +22,19 @@ let
       runner:x:1000:runner
     '';
     inittab = ''
-      ::ctrlaltdel:${busybox' "reboot"}
+      ::sysinit:${busybox' "mount"} -t proc proc /proc
+      ::sysinit:${busybox' "mount"} -t sysfs sysfs /sys
+      ::sysinit:${busybox' "mount"} -t tmpfs -o size=5M tmpfs /runner
+      ::sysinit:${busybox' "mount"} -t tmpfs -o size=5M tmpfs /tmp
       ::once:${lib.getExe coden-agent}
+      ::ctrlaltdel:${busybox' "reboot"}
       ::restart:${busybox' "init"}
     '';
   };
 
   envPackages = [
     busybox
+    gcc
   ]
   ++ lib.mapAttrsToList (name: contents: writeTextDir "etc/${name}" contents) etc;
 

@@ -18,13 +18,24 @@ futures-channel = { version = "0.3", default-features = false, features = ["sink
 futures-core = { version = "0.3" }
 futures-sink = { version = "0.3" }
 futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-syntax = { version = "0.8" }
+serde_core = { version = "1", features = ["alloc"] }
+serde_json = { version = "1", features = ["raw_value"] }
+smallvec = { version = "1", default-features = false, features = ["const_new"] }
+tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1" }
 
 [build-dependencies]
+memchr = { version = "2" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
-syn = { version = "3", features = ["extra-traits", "full"] }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-syntax = { version = "0.8" }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 libc = { version = "0.2", features = ["extra_traits"] }

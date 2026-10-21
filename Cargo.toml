@@ -15,6 +15,7 @@ coden-vm = { path = "./crates/coden-vm" }
 
 anyhow = "1.0.104"
 bytes = "1.12.1"
+nix = { version = "0.31.3", features = ["user"] }
 rand = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.152"

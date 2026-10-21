@@ -395,7 +395,22 @@ impl Machine {
         let mut agent_client = None;
         loop {
             tokio::select! {
-                res = vsock_listener.accept(), if agent_client.is_none() => {
+                biased;
+
+                exit_status = child.wait() => {
+                    match exit_status {
+                        Ok(exit_status) => info!(%exit_status, "VM exited"),
+                        Err(e) => error!(err = ?e, "failed to wait on VM"),
+                    }
+                    break;
+                }
+                _ = cancel.cancelled(), if !did_kill => {
+                    did_kill = true;
+                    info!("cancel requested; killing VM");
+                    _ = child.start_kill();
+                }
+
+                res = vsock_listener.accept(), if !did_kill && agent_client.is_none() => {
                     let (stream, _) = match res {
                         Ok(res) => res,
                         Err(e) => {
@@ -408,30 +423,21 @@ impl Machine {
                     agent_client = Some(Client::new(stream));
                     _ = ready.set(());
                 }
-                cmd = cmd_receiver.recv(), if agent_client.is_some() => {
+
+                cmd = cmd_receiver.recv(), if !did_kill && agent_client.is_some() => {
                     let Some(cmd) = cmd else {
-                        if !cancel.is_cancelled() {
-                            debug!("no longer receiving any commands");
-                            cancel.cancel();
-                        }
+                        debug!("no longer receiving any commands");
+                        cancel.cancel();
                         continue;
                     };
                     let agent_client = agent_client.as_mut().unwrap();
 
-                    let res = agent_client.request(&cmd.request).await.context("could not perform request");
-                    _ = cmd.reply_to.send(res);
-                }
-                _ = cancel.cancelled(), if !did_kill => {
-                    did_kill = true;
-                    info!("cancel requested; killing VM");
-                    _ = child.start_kill();
-                }
-                exit_status = child.wait() => {
-                    match exit_status {
-                        Ok(exit_status) => info!(%exit_status, "VM exited"),
-                        Err(e) => error!(err = ?e, "failed to wait on VM"),
+                    if let Some(res) = cancel
+                        .run_until_cancelled(agent_client.request(&cmd.request))
+                        .await
+                    {
+                        _ = cmd.reply_to.send(res.context("could not perform request"));
                     }
-                    break;
                 }
             }
         }

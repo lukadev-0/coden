@@ -4,10 +4,13 @@ use anyhow::{Context, Result};
 use coden_agent_api::VSOCK_PORT;
 use coden_agent_api::schema::{self, ExecResponseStatus, Request};
 use coden_agent_api::server::Server;
+use nix::unistd::User;
 use serde_json::to_value;
 use tokio::{io::AsyncReadExt, net::unix::pipe::pipe, process::Command};
 use tokio_vsock::{VsockAddr, VsockStream};
 use tracing::{Instrument, Level, debug, error, info, info_span};
+
+const RUNNER_USERNAME: &str = "runner";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,6 +18,12 @@ async fn main() -> Result<()> {
         .with_max_level(Level::DEBUG)
         .with_ansi(false)
         .init();
+
+    let runner_user = User::from_name(RUNNER_USERNAME)
+        .with_context(|| format!("could not lookup user '{RUNNER_USERNAME}'"))?
+        .with_context(|| format!("no user named '{RUNNER_USERNAME}'"))?;
+
+    let mut state = State { runner_user };
 
     let stream = VsockStream::connect(VsockAddr::new(2, VSOCK_PORT))
         .await
@@ -25,7 +34,10 @@ async fn main() -> Result<()> {
     let mut server = Server::new(stream);
     while let Some(request) = server.read_request().await? {
         let span = info_span!("request", ?request);
-        match handle_request(request).instrument(span.clone()).await {
+        match handle_request(request, &mut state)
+            .instrument(span.clone())
+            .await
+        {
             Ok(res) => {
                 server
                     .send_response(&res)
@@ -41,7 +53,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_request(request: Request) -> Result<serde_json::Value> {
+struct State {
+    runner_user: User,
+}
+
+async fn handle_request(request: Request, state: &mut State) -> Result<serde_json::Value> {
     debug!("request");
     match request {
         Request::Exec(exec) => {
@@ -55,6 +71,15 @@ async fn handle_request(request: Request) -> Result<serde_json::Value> {
                 .stdin(Stdio::null())
                 .stdout(stdout_writer)
                 .stderr(stderr_writer)
+                .uid(state.runner_user.uid.as_raw())
+                .uid(state.runner_user.gid.as_raw())
+                .env_clear()
+                .env("LOGNAME", &state.runner_user.name)
+                .env("USER", &state.runner_user.name)
+                .env("HOME", &state.runner_user.dir)
+                .env("SHELL", &state.runner_user.shell)
+                .env("PATH", "/bin")
+                .current_dir(&state.runner_user.dir)
                 .spawn()
                 .context("could not spawn program")?;
 
