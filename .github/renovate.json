@@ -1,0 +1,26 @@
+{
+  "extends": [
+    "group:allNonMajor",
+    ":maintainLockFilesWeekly"
+  ],
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "ignorePaths": ["crates/workspace-hack/**"],
+  "nix": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "cargo"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "cargo install cargo-hakari --locked",
+          "cargo hakari generate"
+        ],
+        "executionMode": "branch"
+      }
+    }
+  ]
+}
