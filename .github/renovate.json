@@ -1,0 +1,30 @@
+{
+  "repositories": [
+    "lukadev-0/coden"
+  ],
+  "allowedCommands": [
+    "^nix develop"
+  ],
+  "extends": [
+    "group:allNonMajor",
+    ":maintainLockFilesWeekly"
+  ],
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "nix": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "cargo"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "nix develop --accept-flake-config .#minimal --command cargo hakari generate"
+        ],
+        "executionMode": "branch"
+      }
+    }
+  ]
+}

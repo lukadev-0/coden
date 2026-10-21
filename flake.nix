@@ -12,6 +12,11 @@
     };
   };
 
+  nixConfig = {
+    extra-substituters = [ "https://lukadev.cachix.org" ];
+    extra-trusted-public-keys = [ "lukadev.cachix.org-1:RdnilP3lkFbstKV+MkUQAHAUxluyLCwo1wQEMAS9vyQ=" ];
+  };
+
   outputs =
     {
       nixpkgs,
@@ -86,6 +91,12 @@
             ROOTFS = pkgs.rootfs;
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";
+          };
+          minimal = pkgs.mkShell {
+            packages = [
+              (rustToolchain pkgs)
+              pkgs.cargo-hakari
+            ];
           };
         }
       );
