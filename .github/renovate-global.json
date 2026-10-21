@@ -1,0 +1,9 @@
+{
+  "repositories": [
+    "lukadev-0/coden"
+  ],
+  "allowedCommands": [
+    "^cargo install",
+    "^cargo hakari generate$"
+  ]
+}
