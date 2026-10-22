@@ -17,15 +17,15 @@ docker run -it --rm \
     --device /dev/kvm \
     --cap-add SYS_ADMIN \
     --security-opt seccomp=unconfined \
+    -p 8080:8080 \
+    -e RUST_LOG=debug \
     ghcr.io/lukadev-0/coden
 ```
 
-This repository contains a Nix flake containing a devShell that contains the
-required environment variables. After installing Nix, you can run it like this:
+This repository contains a Nix flake that exposes a package that includes all
+the required dependencies.
 ```sh
-nix develop
-nix build .#coden-server
-sudo -E ./result/bin/coden-server
+sudo RUST_LOG=debug nix run github:lukadev-0/coden
 ```
 
 You can also acquire the required files manually, refer to
