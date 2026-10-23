@@ -1,0 +1,9 @@
+#!/bin/busybox sh
+
+busybox mount -t squashfs -o loop /base.img /base
+busybox mount -t overlay -o lowerdir=/base:/overlay overlay /mnt
+busybox pivot_root /mnt /mnt/mnt
+
+mount --move /mnt/dev /dev
+umount -l /mnt
+exec /bin/init

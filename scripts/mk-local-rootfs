@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -e
+
+scripts_dir="$(dirname -- "$0")"
+project_dir="$(dirname -- "$scripts_dir")"
+tmp_dir="$project_dir/tmp"
+mountpoint="$tmp_dir/rootfs-mnt"
+local_image="$tmp_dir/rootfs.ext4"
+mkdir -p "$tmp_dir"
+
+cd "$project_dir"
+rootfs_base="$(nix build '.#rootfs-base' --no-link --print-out-paths)"
+busybox_static="$(nix build '.#busybox-static' --no-link --print-out-paths)"
+
+rm -f "$local_image"
+sudo umount "$mountpoint" 2>/dev/null || true
+mkdir -p "$mountpoint"
+
+fallocate -l 500M "$local_image"
+mkfs.ext4 "$local_image"
+
+sudo mount -o loop "$local_image" "$mountpoint"
+sudo mkdir "$mountpoint"/{bin,dev,mnt,base}
+sudo cp "$rootfs_base" "$mountpoint/base.img"
+sudo cp "$busybox_static/bin/busybox" "$scripts_dir/init" "$mountpoint/bin"
+sudo umount "$mountpoint"
+
+"$scripts_dir/update-local-rootfs"

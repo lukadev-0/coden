@@ -59,6 +59,7 @@
         system: pkgs: {
           inherit (pkgs)
             firecracker
+            rootfs-base
             rootfs
             microvm-kernel
             coden-server-docker-stream
@@ -67,6 +68,7 @@
             coden-agent
             ;
           default = pkgs.coden-server;
+          busybox-static = pkgs.pkgsStatic.busybox;
         }
       );
 
@@ -86,17 +88,11 @@
               (rustToolchain pkgs)
               pkgs.firecracker
               pkgs.cargo-hakari
+              pkgs.e2fsprogs
             ];
             VMLINUX = pkgs.microvm-kernel;
-            ROOTFS = pkgs.rootfs;
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";
-          };
-          minimal = pkgs.mkShell {
-            packages = [
-              (rustToolchain pkgs)
-              pkgs.cargo-hakari
-            ];
           };
         }
       );
