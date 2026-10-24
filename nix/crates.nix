@@ -4,6 +4,7 @@
   makeWrapper,
   craneLib,
   cargo-hakari,
+  cargo-about,
   microvm-kernel,
   rootfs,
   firecracker,
@@ -70,6 +71,18 @@ let
       ]
     );
 
+  copyright-html = craneLib.mkCargoDerivation {
+    pname = "coden-copyright.html";
+    version = "0.0.0";
+    src = craneLib.mkDummySrc { inherit src; };
+    inherit cargoArtifacts;
+    nativeBuildInputs = [ cargo-about ];
+    buildPhaseCargoCommand = ''
+      mkdir -p "$out"
+      cargo about generate -c ${../.config/about.toml} ${../.config/about.hbs} -o "$out/copyright.html"
+    '';
+  };
+
   coden-server-unwrapped = buildPackage {
     pname = "coden-server-unwrapped";
     crate = ../crates/coden-server;
@@ -77,6 +90,7 @@ let
       ../crates/coden-vm
       ../crates/coden-agent-api
     ];
+    env.COPYRIGHT_HTML = "${copyright-html}/copyright.html";
     meta.mainProgram = "coden-server";
   };
 in

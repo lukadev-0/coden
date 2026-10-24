@@ -5,12 +5,16 @@
   squashfsTools,
   busybox,
   gcc,
+  python3,
+  rustc,
   additionalPackages ? [ ],
 }:
 let
   envPackages = [
     busybox
     gcc
+    python3
+    rustc
   ]
   ++ additionalPackages;
 

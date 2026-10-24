@@ -17,7 +17,7 @@ rm -f "$local_image"
 sudo umount "$mountpoint" 2>/dev/null || true
 mkdir -p "$mountpoint"
 
-fallocate -l 500M "$local_image"
+fallocate -l 1G "$local_image"
 mkfs.ext4 "$local_image"
 
 sudo mount -o loop "$local_image" "$mountpoint"

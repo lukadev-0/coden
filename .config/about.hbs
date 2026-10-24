@@ -1,0 +1,86 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width">
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: monospace;
+      }
+
+      body {
+        margin: 1rem;
+      }
+
+      main {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      section {
+        margin: 4rem 0;
+      }
+
+      article {
+        margin: 2rem 0;
+        border: 1px solid GrayText;
+      }
+
+      details {
+        border-top: 1px solid GrayText;
+      }
+
+      summary {
+        background-color: Canvas;
+        font-weight: 700;
+        padding: 1rem;
+        position: sticky;
+        top: 0;
+      }
+
+      pre {
+        overflow: auto;
+        margin: 0;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Copyright</h1>
+        <p>This page lists the dependencies of Coden and their licenses.</p>
+      </section>
+
+      <section>
+        <h2>License Overview</h2>
+        <ul>
+          {{#each overview}}
+            <li>{{name}} ({{count}})</li>
+          {{/each}}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Dependencies</h2>
+        {{#each licenses}}
+          <article>
+            <ul>
+              {{#each used_by}}
+                <li>
+                  <a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">
+                    {{crate.name}}/{{crate.version}}
+                  </a>
+                </li>
+              {{/each}}
+            </ul>
+            <details>
+              <summary>License: {{name}}</summary>
+              <pre>{{text}}</pre>
+            </details>
+          </article>
+        {{/each}}
+      </section>
+    </main>
+  </body>
+
+</html>

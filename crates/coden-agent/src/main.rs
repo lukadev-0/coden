@@ -6,6 +6,7 @@ use coden_agent_api::schema::{self, ExecResponseStatus, Request};
 use coden_agent_api::server::Server;
 use nix::unistd::User;
 use serde_json::to_value;
+use tokio::fs;
 use tokio::{io::AsyncReadExt, net::unix::pipe::pipe, process::Command};
 use tokio_vsock::{VsockAddr, VsockStream};
 use tracing::{Instrument, Level, debug, error, info, info_span};
@@ -98,6 +99,16 @@ async fn handle_request(request: Request, state: &mut State) -> Result<serde_jso
                     .or(status.signal().map(ExecResponseStatus::Signal))
                     .unwrap_or(ExecResponseStatus::Other),
             })?)
+        }
+        Request::WriteFile(write_file) => {
+            fs::write(
+                state.runner_user.dir.join(&write_file.path),
+                &write_file.contents,
+            )
+            .await
+            .with_context(|| format!("could not write file to {}", write_file.path.display()))?;
+
+            Ok(to_value(schema::WriteFileResponse {})?)
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
@@ -13,27 +13,42 @@ use coden_vm::MachineConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
+use tokio::sync::SemaphorePermit;
 use tracing::error;
 use utoipa::{IntoResponses, OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::AppState;
+use crate::{AppState, languages};
 
-#[derive(Serialize, ToSchema, IntoResponses)]
-#[response(
-    status = INTERNAL_SERVER_ERROR,
-    description = "Internal server error",
-    example = json!({ "message": "Internal server error" }),
-)]
+#[derive(Serialize, ToSchema)]
 pub struct ErrorResponse<'a> {
     message: &'a str,
 }
+
+#[derive(IntoResponses)]
+#[response(
+    status = INTERNAL_SERVER_ERROR,
+    description = "Internal server error.",
+    example = json!({ "message": "Internal server error." }),
+)]
+#[allow(unused)]
+pub struct ErrorResponses<'a>(ErrorResponse<'a>);
 
 pub struct ApiError {
     pub message: String,
     pub status: StatusCode,
     pub source: Option<anyhow::Error>,
+}
+
+impl ApiError {
+    pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            status,
+            source: None,
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -57,7 +72,7 @@ impl IntoResponse for ApiError {
 impl From<anyhow::Error> for ApiError {
     fn from(value: anyhow::Error) -> Self {
         Self {
-            message: "Internal server error".into(),
+            message: "Internal server error.".into(),
             status: StatusCode::INTERNAL_SERVER_ERROR,
             source: Some(value),
         }
@@ -67,8 +82,10 @@ impl From<anyhow::Error> for ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 pub fn router() -> Router<AppState> {
-    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(get_openapi, exec))
+    let (mut router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(get_openapi))
+        .routes(routes!(exec))
+        .routes(routes!(run))
         .split_for_parts();
 
     let scalar_config = json!({
@@ -83,11 +100,19 @@ pub fn router() -> Router<AppState> {
         "hideClientButton": true,
     });
 
-    router
+    router = router
         .route("/", get(root))
         .merge(scalar_api_reference::axum::router("/docs", &scalar_config).with_state(()))
         .layer(Extension(api))
-        .layer(middleware::from_fn(log_errors))
+        .layer(middleware::from_fn(log_errors));
+
+    #[cfg(copyright_page)]
+    {
+        let html = include_str!(concat!(env!("OUT_DIR"), "/copyright.html"));
+        router = router.route("/copyright", get(async move || axum::response::Html(html)));
+    }
+
+    router
 }
 
 #[derive(OpenApi)]
@@ -117,7 +142,7 @@ async fn root() -> String {
     {}/{}
 
     Source: {}
-    License: {}
+    License: {}{}
 
     For API documentation, see `/docs`.
     For the OpenAPI document, see `/openapi.json`.
@@ -128,6 +153,11 @@ async fn root() -> String {
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_REPOSITORY"),
         env!("CARGO_PKG_LICENSE"),
+        if cfg!(copyright_page) {
+            " (also see /copyright)"
+        } else {
+            ""
+        }
     )
 }
 
@@ -143,6 +173,39 @@ async fn get_openapi(
     Extension(openapi): Extension<utoipa::openapi::OpenApi>,
 ) -> Json<utoipa::openapi::OpenApi> {
     Json(openapi)
+}
+
+#[derive(IntoResponses)]
+#[response(
+    status = SERVICE_UNAVAILABLE,
+    description = "No available VMs left.",
+)]
+#[allow(unused)]
+pub struct VmResponses<'a>(ErrorResponse<'a>);
+
+fn acquire_vm_permit(app_state: &AppState) -> Result<SemaphorePermit<'_>, ApiError> {
+    app_state.vm_semaphore.try_acquire().map_err(|_| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "No available VMs left. Try again later.",
+        )
+    })
+}
+
+async fn spawn_machine(app_state: &AppState) -> Result<coden_vm::Machine> {
+    let machine_config = MachineConfig {
+        jailer_uid: app_state.config.jailer_uid,
+        jailer_gid: app_state.config.jailer_gid,
+        kernel_image: app_state.vm_vmlinux.clone(),
+        rootfs: app_state.vm_rootfs.clone(),
+        vcpu_count: app_state.config.vm_vcpu_count,
+        mem_size_mib: app_state.config.vm_mem_size_mib,
+    };
+    app_state
+        .vm_manager
+        .spawn(&machine_config)
+        .await
+        .context("could not spawn VM")
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -215,7 +278,7 @@ impl From<schema::ExecResponseStatus> for ExecResponseStatus {
         (
             status = OK,
             body = ExecResponse,
-            description = "Program executed successfully",
+            description = "Program executed successfully.",
             examples(
                 ("1. Success" = (value = json!({
                     "time": 4,
@@ -234,24 +297,14 @@ impl From<schema::ExecResponseStatus> for ExecResponseStatus {
                 }))),
             )
         ),
-        ErrorResponse,
+        VmResponses,
+        ErrorResponses,
     ),
 )]
 async fn exec(app_state: AppState, Json(body): Json<ExecBody>) -> ApiResult<Json<ExecResponse>> {
-    let machine_config = MachineConfig {
-        jailer_uid: app_state.config.jailer_uid,
-        jailer_gid: app_state.config.jailer_gid,
-        kernel_image: app_state.vm_vmlinux.clone(),
-        rootfs: app_state.vm_rootfs.clone(),
-        vcpu_count: app_state.config.vm_vcpu_count,
-        mem_size_mib: app_state.config.vm_mem_size_mib,
-    };
-    let machine = app_state
-        .vm_manager
-        .spawn(&machine_config)
-        .await
-        .context("could not spawn VM")?;
+    let _permit = acquire_vm_permit(&app_state)?;
 
+    let machine = spawn_machine(&app_state).await?;
     let res = machine
         .request(schema::ExecRequest {
             program: body.program,
@@ -261,4 +314,99 @@ async fn exec(app_state: AppState, Json(body): Json<ExecBody>) -> ApiResult<Json
         .context("could not execute program in VM")?;
 
     Ok(Json(res.into()))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RunBody {
+    language: String,
+    code: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RunResponse {
+    /// Result after executing the compiler.
+    /// This is `null` if the language does not require compilation.
+    compiler: Option<ExecResponse>,
+    /// Result after executing the (compiled) program.
+    /// This is `null` if compilation failed.
+    program: Option<ExecResponse>,
+}
+
+/// Compile & execute code
+#[utoipa::path(
+    post,
+    path = "/run",
+    responses(
+        (
+            status = OK,
+            body = RunResponse,
+            description = "Compiler and program output.",
+        ),
+        VmResponses,
+        ErrorResponses,
+    ),
+)]
+async fn run(app_state: AppState, Json(body): Json<RunBody>) -> ApiResult<Json<RunResponse>> {
+    let Some(language) = languages::get_by_id(&body.language) else {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "Unknown language"));
+    };
+
+    let _permit = acquire_vm_permit(&app_state)?;
+
+    let machine = spawn_machine(&app_state).await?;
+    machine
+        .request(schema::WriteFileRequest {
+            path: language.source_file.into(),
+            contents: body.code.into(),
+        })
+        .await
+        .context("could not write program code into VM")?;
+
+    let compiler_res = if let Some(command) = language.compile {
+        Some(
+            machine
+                .request(schema::ExecRequest {
+                    program: command
+                        .first()
+                        .expect("compile command should have at least one item")
+                        .to_string(),
+                    args: command.iter().skip(1).map(|s| s.to_string()).collect(),
+                })
+                .await
+                .context("could not execute compiler in VM")?,
+        )
+    } else {
+        None
+    };
+
+    let program_res = if compiler_res
+        .as_ref()
+        .is_none_or(|c| c.status == schema::ExecResponseStatus::Code(0))
+    {
+        Some(
+            machine
+                .request(schema::ExecRequest {
+                    program: language
+                        .execute
+                        .first()
+                        .expect("execute command should have at least one item")
+                        .to_string(),
+                    args: language
+                        .execute
+                        .iter()
+                        .skip(1)
+                        .map(|s| s.to_string())
+                        .collect(),
+                })
+                .await
+                .context("could not execute program in VM")?,
+        )
+    } else {
+        None
+    };
+
+    Ok(Json(RunResponse {
+        compiler: compiler_res.map(Into::into),
+        program: program_res.map(Into::into),
+    }))
 }

@@ -1,4 +1,5 @@
 mod config;
+mod languages;
 mod routes;
 
 use std::{ops::Deref, sync::Arc};
@@ -6,7 +7,7 @@ use std::{ops::Deref, sync::Arc};
 use anyhow::{Context, Result};
 use axum::extract::{FromRequestParts, State};
 use config::Config;
-use tokio::{fs, net::TcpListener};
+use tokio::{fs, net::TcpListener, sync::Semaphore};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument};
 
@@ -16,6 +17,7 @@ struct AppState(Arc<AppStateInner>);
 
 struct AppStateInner {
     config: Config,
+    vm_semaphore: Semaphore,
     vm_manager: coden_vm::Manager,
     vm_vmlinux: coden_vm::Resource,
     vm_rootfs: coden_vm::Resource,
@@ -74,6 +76,8 @@ async fn init(config: Config) -> Result<AppState> {
             )
         })?;
 
+    let vm_semaphore = Semaphore::new(config.max_running_vms);
+
     let vm_manager = coden_vm::Manager::new(&coden_vm::ManagerOptions {
         state_dir: config.state_dir.clone(),
         firecracker: config.firecracker.clone(),
@@ -93,6 +97,7 @@ async fn init(config: Config) -> Result<AppState> {
 
     let inner = AppStateInner {
         config,
+        vm_semaphore,
         vm_manager,
         vm_vmlinux,
         vm_rootfs,

@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
 use anyhow::{Context, Result};
 use bytes::BytesMut;
@@ -32,16 +32,26 @@ where
         Req: HasResponse + Debug + Serialize,
         Req::Response: DeserializeOwned + Debug,
     {
-        io_helpers::write_json_line(&mut self.transport, &request)
-            .await
-            .context("could not send request")?;
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            io_helpers::write_json_line(&mut self.transport, &request),
+        )
+        .await
+        .map_err(anyhow::Error::new)
+        .flatten()
+        .context("could not send request")?;
 
         tracing::debug!("request sent");
 
-        let response = io_helpers::read_json_line(&mut self.transport, &mut self.buf)
-            .await
-            .context("could not read response")?
-            .context("connection closed")?;
+        let response = tokio::time::timeout(
+            Duration::from_secs(30),
+            io_helpers::read_json_line(&mut self.transport, &mut self.buf),
+        )
+        .await
+        .map_err(anyhow::Error::new)
+        .flatten()
+        .context("could not read response")?
+        .context("connection closed")?;
 
         tracing::debug!(?response, "received response");
         Ok(response)

@@ -88,6 +88,7 @@
               (rustToolchain pkgs)
               pkgs.firecracker
               pkgs.cargo-hakari
+              pkgs.cargo-about
               pkgs.e2fsprogs
             ];
             VMLINUX = pkgs.microvm-kernel;
