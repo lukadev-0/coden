@@ -4,11 +4,13 @@
   runCommand,
 }:
 let
+  base = linux_6_18;
   linux = linuxManualConfig {
-    inherit (linux_6_18) src version;
+    inherit (base) src;
+    version = "${base.version}-coden";
     configfile = ./microvm-kernel.config;
   };
 in
-runCommand "microvm-kernel" { } ''
-  cp ${linux.dev}/vmlinux "$out"
+runCommand "microvm-kernel" { inherit linux; } ''
+  cp $linux/bzImage "$out"
 ''
