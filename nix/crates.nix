@@ -109,6 +109,7 @@ in
         --set-default FIRECRACKER ${lib.getExe' firecracker "firecracker"} \
         --set-default FIRECRACKER_JAILER ${lib.getExe' firecracker "jailer"}
     '';
+    meta.mainProgram = "coden-server";
   };
 
   coden-agent = buildPackage {
