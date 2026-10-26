@@ -7,11 +7,12 @@ An HTTP API for running code within a virtual machine.
 - [x] kernel & rootfs
 - [x] spawn a Firecracker microVM
 - [x] guest agent to accept & execute commands sent by the host
-- [ ] HTTP API to spawn a VM and execute the given code
+- [x] HTTP API to spawn a VM and execute the given code
 
-## How to run?
+## How to host this?
 
-The easiest way to run this is via Docker:
+The easiest way to host this is via Docker:
+
 ```
 docker run -it --rm \
     --device /dev/kvm \
@@ -22,8 +23,11 @@ docker run -it --rm \
     ghcr.io/lukadev-0/coden
 ```
 
-This repository contains a Nix flake that exposes a package that includes all
-the required dependencies.
+You can also use the Nix flake included in this repository. It exposes a
+package that includes all the required dependencies. It is recommended to
+use our binary cache ([lukadev.cachix.org](https://lukadev.cachix.org/))
+to avoid compiling everything.
+
 ```sh
 sudo RUST_LOG=debug nix run github:lukadev-0/coden
 ```
