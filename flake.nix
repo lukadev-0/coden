@@ -91,7 +91,7 @@
               pkgs.cargo-about
               pkgs.e2fsprogs
             ];
-            VMLINUX = pkgs.microvm-kernel;
+            VMLINUX = "${pkgs.microvm-kernel}/kernel";
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";
           };
