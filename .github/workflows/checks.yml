@@ -20,3 +20,16 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Perform checks
         run: nix flake check -L
+      - name: Cachix Pins
+        if: github.ref_name == 'main'
+        env:
+          CACHIX_CACHE: "${{ vars.CACHIX_CACHE }}"
+        run: |
+          mapfile -t outputs \
+            < <(nix build \
+              .#coden-server-unwrapped .#rootfs .#microvm-kernel \
+              --no-link --print-out-paths)
+
+          cachix pin $CACHIX_CACHE coden-server ${outputs[0]} --keep-revisions 1 --artifact bin/coden-server
+          cachix pin $CACHIX_CACHE rootfs ${outputs[1]} --keep-revisions 1 --artifact rootfs
+          cachix pin $CACHIX_CACHE microvm-kernel ${outputs[2]} --keep-revisions 1 --artifact kernel

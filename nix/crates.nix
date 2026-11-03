@@ -104,8 +104,8 @@ in
     buildPhase = ''
       mkdir -p "$out/bin"
       makeWrapper ${lib.getExe coden-server-unwrapped} "$out/bin/coden-server" \
-        --set-default VMLINUX ${microvm-kernel} \
-        --set-default ROOTFS ${rootfs} \
+        --set-default VMLINUX ${microvm-kernel}/kernel \
+        --set-default ROOTFS ${rootfs}/rootfs \
         --set-default FIRECRACKER ${lib.getExe' firecracker "firecracker"} \
         --set-default FIRECRACKER_JAILER ${lib.getExe' firecracker "jailer"}
     '';

@@ -11,8 +11,8 @@ dockerTools.streamLayeredImage {
   contents = coden-server-unwrapped;
   config = {
     Env = [
-      "VMLINUX=${microvm-kernel}"
-      "ROOTFS=${rootfs}"
+      "VMLINUX=${microvm-kernel}/kernel"
+      "ROOTFS=${rootfs}/rootfs"
       "FIRECRACKER=${lib.getExe' firecracker "firecracker"}"
       "FIRECRACKER_JAILER=${lib.getExe' firecracker "jailer"}"
       "HTTP_ADDR=0.0.0.0:8080"

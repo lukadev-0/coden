@@ -12,5 +12,6 @@ let
   };
 in
 runCommand "microvm-kernel" { inherit linux; } ''
-  cp $linux/bzImage "$out"
+  mkdir -p "$out"
+  cp $linux/bzImage "$out/kernel"
 ''

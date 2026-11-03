@@ -52,7 +52,8 @@ runCommand "rootfs"
       addFile "$path"
     done
 
-    mksquashfs "''${sourceFiles[@]}" "$out" \
+    mkdir -p "$out"
+    mksquashfs "''${sourceFiles[@]}" "$out/rootfs" \
       -no-strip -force-uid 0 -force-gid 0 -repro -info -pseudo-override \
       -comp zstd -Xcompression-level 15 \
       -root-mode 755 \
