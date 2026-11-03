@@ -22,7 +22,7 @@ mkfs.ext4 "$local_image"
 
 sudo mount -o loop "$local_image" "$mountpoint"
 sudo mkdir "$mountpoint"/{bin,dev,mnt,base}
-sudo cp "$rootfs_base" "$mountpoint/base.img"
+sudo cp "$rootfs_base/rootfs" "$mountpoint/base.img"
 sudo cp "$busybox_static/bin/busybox" "$scripts_dir/init" "$mountpoint/bin"
 sudo umount "$mountpoint"
 
