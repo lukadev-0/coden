@@ -208,15 +208,25 @@ impl Manager {
             Alphanumeric.sample_string(&mut rand::rng(), RESOURCE_FILE_RAND_LEN)
         );
         let res_file_path = self.tmp_dir.join(res_file_name);
-        tokio::fs::copy(&src, &res_file_path)
-            .await
-            .with_context(|| {
-                format!(
-                    "could not copy '{}' to '{}'",
+        if let Err(e) = tokio::fs::hard_link(&src, &res_file_path).await {
+            if e.kind() == std::io::ErrorKind::CrossesDevices {
+                tokio::fs::copy(&src, &res_file_path)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "could not copy '{}' to '{}'",
+                            src.display(),
+                            res_file_path.display(),
+                        )
+                    })?;
+            } else {
+                return Err(e).context(format!(
+                    "could not hard link '{}' to '{}'",
                     src.display(),
-                    res_file_path.display()
-                )
-            })?;
+                    res_file_path.display(),
+                ));
+            }
+        }
         Ok(Resource(res_file_path))
     }
 
