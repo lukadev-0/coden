@@ -15,6 +15,37 @@ in
       type = lib.types.str;
       default = "127.0.0.1:31543";
     };
+    openTelemetry = {
+      enable = lib.mkEnableOption "OpenTelemetry exporter for Coden server";
+      serviceName = lib.mkOption {
+        type = lib.types.str;
+        default = "coden";
+      };
+      endpoint = lib.mkOption {
+        type = lib.types.str;
+        default =
+          if cfg.openTelemetry.protocol == "grpc" then "http://localhost:4317" else "http://localhost:4318";
+      };
+      protocol = lib.mkOption {
+        type = lib.types.enum [
+          "grpc"
+          "http/protobuf"
+        ];
+        default = "grpc";
+      };
+    };
+    environment = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.nullOr (
+          lib.types.oneOf [
+            lib.types.str
+            lib.types.path
+            lib.types.package
+          ]
+        )
+      );
+      default = { };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -43,7 +74,14 @@ in
       };
       environment = {
         HTTP_ADDR = cfg.httpAddress;
-      };
+      }
+      // lib.optionalAttrs (cfg.openTelemetry.enable) {
+        CODEN_OTEL = "1";
+        OTEL_SERVICE_NAME = cfg.openTelemetry.serviceName;
+        OTEL_EXPORTER_OTLP_ENDPOINT = cfg.openTelemetry.endpoint;
+        OTEL_EXPORTER_OTLP_PROTOCOL = cfg.openTelemetry.protocol;
+      }
+      // cfg.environment;
       script = ''
         CODEN_JAILER_UID=$(id -u coden) \
         CODEN_JAILER_GID=$(id -g coden) \
