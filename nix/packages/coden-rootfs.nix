@@ -1,7 +1,7 @@
 {
   lib,
   writeTextDir,
-  rootfs-base,
+  coden-rootfs-base,
   busybox,
   coden-agent,
 }:
@@ -30,6 +30,6 @@ let
 
   additionalPackages = lib.mapAttrsToList (name: contents: writeTextDir "etc/${name}" contents) etc;
 in
-rootfs-base.override {
+coden-rootfs-base.override {
   inherit additionalPackages;
 }

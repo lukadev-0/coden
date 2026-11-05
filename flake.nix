@@ -35,38 +35,36 @@
 
       mkPackages =
         pkgs:
-        import ./nix {
+        import ./nix/packages {
+          inherit pkgs;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-        } pkgs;
+        };
 
-      systems = [ "x86_64-linux" ];
-      forEachSystem =
-        f:
-        lib.genAttrs systems (
-          system:
-          f system (
-            import nixpkgs {
-              inherit system;
-              overlays = [ (final: _: mkPackages final) ];
-            }
-          )
-        );
+      packageNames = [
+        "coden-agent"
+        "coden-kernel"
+        "coden-rootfs"
+        "coden-rootfs-base"
+        "coden-server"
+        "firecracker"
+      ];
+
+      systems = lib.genAttrs [ "x86_64-linux" ] (
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ (final: _: mkPackages final) ];
+        }
+      );
+      forEachSystem = f: lib.mapAttrs f systems;
     in
     {
-      overlays.default = final: _: lib.removeAttrs (mkPackages final) [ "coden-cargo-checks" ];
+      overlays.default = final: _: lib.getAttrs packageNames (mkPackages final);
 
       packages = forEachSystem (
-        system: pkgs: {
-          inherit (pkgs)
-            firecracker
-            rootfs-base
-            rootfs
-            microvm-kernel
-            coden-server-docker-stream
-            coden-server-unwrapped
-            coden-server
-            coden-agent
-            ;
+        system: pkgs:
+        lib.getAttrs packageNames pkgs
+        // {
           default = pkgs.coden-server;
           busybox-static = pkgs.pkgsStatic.busybox;
         }
@@ -74,11 +72,11 @@
 
       checks = forEachSystem (
         system: pkgs:
-        lib.removeAttrs (self.packages.${system}) [ "default" ]
+        lib.getAttrs packageNames pkgs
         // lib.mapAttrs' (name: value: {
-          name = "coden-cargo-check-${name}";
+          name = "coden-check-${name}";
           inherit value;
-        }) (lib.filterAttrs (_: lib.isDerivation) pkgs.coden-cargo-checks)
+        }) pkgs.coden-checks
       );
 
       devShells = forEachSystem (
@@ -91,7 +89,7 @@
               pkgs.cargo-about
               pkgs.e2fsprogs
             ];
-            VMLINUX = "${pkgs.microvm-kernel}/kernel";
+            VMLINUX = "${pkgs.coden-kernel}/kernel";
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";
           };

@@ -10,7 +10,7 @@ local_image="$tmp_dir/rootfs.ext4"
 mkdir -p "$tmp_dir"
 
 cd "$project_dir"
-rootfs_base="$(nix build '.#rootfs-base' --no-link --print-out-paths)"
+rootfs_base="$(nix build '.#coden-rootfs-base' --no-link --print-out-paths)"
 busybox_static="$(nix build '.#busybox-static' --no-link --print-out-paths)"
 
 rm -f "$local_image"

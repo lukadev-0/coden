@@ -8,9 +8,9 @@ tmp_dir="$project_dir/tmp"
 mountpoint="$tmp_dir/rootfs-mnt"
 local_image="$tmp_dir/rootfs.ext4"
 
-rootfsEnv="$(nix build '.#rootfs.rootfsEnv' --no-link --print-out-paths)"
-closure="$(nix build '.#rootfs.closure' --no-link --print-out-paths)"
-closure_base="$(nix build '.#rootfs-base.closure' --no-link --print-out-paths)"
+rootfsEnv="$(nix build '.#coden-rootfs.rootfsEnv' --no-link --print-out-paths)"
+closure="$(nix build '.#coden-rootfs.closure' --no-link --print-out-paths)"
+closure_base="$(nix build '.#coden-rootfs-base.closure' --no-link --print-out-paths)"
 
 sudo umount "$mountpoint" 2>/dev/null || true
 

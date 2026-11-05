@@ -8,10 +8,10 @@ let
   linux = linuxManualConfig {
     inherit (base) src;
     version = "${base.version}-coden";
-    configfile = ./microvm-kernel.config;
+    configfile = ./coden-kernel.config;
   };
 in
-runCommand "microvm-kernel" { inherit linux; } ''
+runCommand "coden-kernel" { inherit linux; } ''
   mkdir -p "$out"
   cp $linux/bzImage "$out/kernel"
 ''
