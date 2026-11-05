@@ -61,6 +61,14 @@
     {
       overlays.default = final: _: lib.getAttrs packageNames (mkPackages final);
 
+      nixosModules = {
+        coden = {
+          imports = [ ./nix/nixos-module.nix ];
+          nixpkgs.overlays = [ self.overlays.default ];
+        };
+        default = self.nixosModules.coden;
+      };
+
       packages = forEachSystem (
         system: pkgs:
         lib.getAttrs packageNames pkgs
