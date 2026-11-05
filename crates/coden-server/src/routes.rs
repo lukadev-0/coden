@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use axum::extract::Request;
+use axum::body::HttpBody;
+use axum::extract::{MatchedPath, Request};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
 use tokio::sync::SemaphorePermit;
-use tracing::error;
+use tracing::{Instrument, error, field, info, info_span};
 use utoipa::{IntoResponses, OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -104,7 +105,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(root))
         .merge(scalar_api_reference::axum::router("/docs", &scalar_config).with_state(()))
         .layer(Extension(api))
-        .layer(middleware::from_fn(log_errors));
+        .layer(middleware::from_fn(request_tracing));
 
     #[cfg(copyright_page)]
     {
@@ -119,12 +120,58 @@ pub fn router() -> Router<AppState> {
 #[openapi(info(title = "Coden API"), components(schemas(ErrorResponse)))]
 struct ApiDoc;
 
-async fn log_errors(request: Request, next: Next) -> Response {
-    let response = next.run(request).await;
-    if let Some(err) = response.extensions().get::<Arc<anyhow::Error>>() {
-        error!(?err, "unhandled error in handler");
+async fn request_tracing(req: Request, next: Next) -> Response {
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_string());
+    let method = req.method().clone();
+
+    let span = {
+        let span_name = match &route {
+            Some(route) => format_args!("{} {}", req.method(), *route),
+            None => format_args!("{}", req.method()),
+        };
+        info_span!(
+            "http.request",
+            otel.name = span_name,
+            otel.kind = "server",
+            otel.status_code = field::Empty,
+            url.original = %req.uri(),
+            http.route = route,
+            http.request.body.size = req.body().size_hint().exact(),
+            http.request.method = %method,
+            http.response.body.size = field::Empty,
+            http.response.status_code = field::Empty,
+        )
+    };
+
+    let start = Instant::now();
+    let res = next.run(req).instrument(span.clone()).await;
+    let duration = start.elapsed();
+    span.record("http.response.body.size", res.body().size_hint().exact());
+    span.record("http.response.status_code", res.status().as_u16());
+    span.record(
+        "otel.status_code",
+        match res.status().is_server_error() {
+            true => "error",
+            false => "ok",
+        },
+    );
+
+    if let Some(e) = res.extensions().get::<Arc<anyhow::Error>>() {
+        error!(parent: &span, exception.message = ?e, "http.server.request.exception");
     }
-    response
+
+    info!(
+        parent: &span,
+        histogram.http.server.request.duration = duration.as_secs_f64(),
+        http.route = route,
+        http.request.method = %method,
+        http.response.status_code = res.status().as_u16(),
+    );
+
+    res
 }
 
 async fn root() -> String {

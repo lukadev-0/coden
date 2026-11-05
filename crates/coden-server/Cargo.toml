@@ -25,3 +25,7 @@ axum = { version = "0.8.9", features = ["macros"] }
 utoipa = { version = "6.0.0", features = ["axum_extras"] }
 utoipa-axum = "0.3.0"
 scalar_api_reference = { version = "0.2.16", features = ["axum"] }
+opentelemetry = "0.33.1"
+opentelemetry_sdk = "0.33.1"
+tracing-opentelemetry = "0.34.0"
+opentelemetry-otlp = { version = "0.33.1", features = ["grpc-tonic"] }

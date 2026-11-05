@@ -26,7 +26,7 @@ impl<T> Client<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    #[instrument(skip(self))]
+    #[instrument(name = "vm.agent.request", skip(self))]
     pub async fn request<Req>(&mut self, request: &Req) -> Result<Req::Response>
     where
         Req: HasResponse + Debug + Serialize,

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use coden_agent_api::client::Client;
@@ -105,7 +106,8 @@ impl Manager {
 
         manager.tasks.spawn_blocking({
             let state_dir = state_dir.clone();
-            move || Self::clean_up_tmp_dirs(&state_dir)
+            let span = tracing::Span::current();
+            move || span.in_scope(|| Self::clean_up_tmp_dirs(&state_dir))
         });
 
         Ok(manager)
@@ -230,12 +232,12 @@ impl Manager {
         Ok(Resource(res_file_path))
     }
 
-    #[instrument(skip_all, fields(machine_id))]
+    #[instrument(name = "vm", skip(self), fields(machine_id))]
     pub async fn spawn(&self, config: &MachineConfig) -> Result<Machine> {
         let machine_id = Alphanumeric.sample_string(&mut rand::rng(), MACHINE_ID_LEN);
         tracing::Span::current().record("machine_id", &machine_id);
 
-        info!(?config, "spawning a new machine");
+        let start = Instant::now();
 
         debug!("setting up required directories and files");
 
@@ -303,7 +305,6 @@ impl Manager {
             .await
             .context("failed to write Firecracker config file")?;
 
-        let span = info_span!(parent: None, "machine", machine_id);
         let tasks = TaskTracker::new();
         let cancel = self.cancel.child_token();
 
@@ -318,7 +319,7 @@ impl Manager {
                     debug!("{line}");
                 }
             }
-            .instrument(info_span!(parent: &span, "firecracker")),
+            .instrument(info_span!("vm.firecracker")),
         );
 
         let child = Command::new(&self.firecracker_jailer)
@@ -349,6 +350,7 @@ impl Manager {
         std::mem::forget(machine_dir_guard);
         tasks.spawn(
             Machine::run_actor(
+                start,
                 cancel.clone(),
                 machine_dir,
                 child,
@@ -356,7 +358,7 @@ impl Manager {
                 cmd_receiver,
                 ready.clone(),
             )
-            .instrument(span.clone()),
+            .in_current_span(),
         );
         tasks.close();
 
@@ -369,10 +371,14 @@ impl Manager {
 
         self.tasks.spawn({
             async move {
+                info!(monotonic_counter.coden_vm.created = 1);
+                info!(counter.coden_vm.active = 1);
                 tasks.wait().await;
-                info!("finished");
+                let duration = start.elapsed();
+                info!(counter.coden_vm.active = -1);
+                info!(histogram.coden_vm.duration = duration.as_secs_f64());
             }
-            .instrument(span)
+            .in_current_span()
         });
 
         Ok(machine)
@@ -394,6 +400,7 @@ struct MachineCommand {
 
 impl Machine {
     async fn run_actor(
+        start: Instant,
         cancel: CancellationToken,
         machine_dir: PathBuf,
         mut child: Child,
@@ -429,7 +436,9 @@ impl Machine {
                         }
                     };
 
+                    let duration = start.elapsed();
                     info!("agent connected");
+                    info!(histogram.coden_vm.startup_duration = duration.as_secs_f64());
                     agent_client = Some(Client::new(stream));
                     _ = ready.set(());
                 }
