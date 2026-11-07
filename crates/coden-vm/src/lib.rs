@@ -483,6 +483,7 @@ impl Machine {
         self.tasks.wait().await;
     }
 
+    #[instrument(name = "vm.agent.request", skip_all)]
     pub async fn request<R>(&self, req: R) -> Result<R::Response>
     where
         R: HasResponse + Into<schema::Request> + Serialize,

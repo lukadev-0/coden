@@ -27,8 +27,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   buildPhase = ''
     mkdir -p "$out/bin"
     makeWrapper "$unwrapped/bin/coden-server" "$out/bin/coden-server" \
-      --set-default VMLINUX ${coden-kernel}/kernel \
-      --set-default ROOTFS ${coden-rootfs}/rootfs \
+      --set-default CODEN_KERNEL ${coden-kernel}/kernel \
+      --set-default CODEN_ROOTFS ${coden-rootfs}/rootfs \
       --set-default FIRECRACKER ${lib.getExe' firecracker "firecracker"} \
       --set-default FIRECRACKER_JAILER ${lib.getExe' firecracker "jailer"}
   '';
@@ -38,8 +38,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     contents = finalAttrs.unwrapped;
     config = {
       Env = [
-        "VMLINUX=${coden-kernel}/kernel"
-        "ROOTFS=${coden-rootfs}/rootfs"
+        "CODEN_KERNEL=${coden-kernel}/kernel"
+        "CODEN_ROOTFS=${coden-rootfs}/rootfs"
         "FIRECRACKER=${lib.getExe' firecracker "firecracker"}"
         "FIRECRACKER_JAILER=${lib.getExe' firecracker "jailer"}"
         "HTTP_ADDR=0.0.0.0:8080"

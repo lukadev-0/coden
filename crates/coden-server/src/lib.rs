@@ -1,51 +1,57 @@
+mod api;
 mod config;
-mod languages;
-mod routes;
 
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
-use axum::extract::{FromRequestParts, State};
+use axum::Router;
+use axum::body::HttpBody;
+use axum::extract::{FromRef, MatchedPath, Request};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use config::Config;
-use tokio::{fs, net::TcpListener, sync::Semaphore};
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, instrument};
+use tracing::{Instrument, error, field, info, info_span, instrument};
 
-#[derive(Clone, FromRequestParts)]
-#[from_request(via(State))]
-struct AppState(Arc<AppStateInner>);
+use crate::api::ApiState;
 
-struct AppStateInner {
-    config: Config,
-    vm_semaphore: Semaphore,
-    vm_manager: coden_vm::Manager,
-    vm_vmlinux: coden_vm::Resource,
-    vm_rootfs: coden_vm::Resource,
+#[derive(Clone)]
+struct App {
+    api_state: Arc<ApiState>,
 }
 
-impl Deref for AppState {
-    type Target = AppStateInner;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl FromRef<App> for Arc<ApiState> {
+    fn from_ref(input: &App) -> Self {
+        input.api_state.clone()
     }
 }
 
 pub async fn run(cancel: CancellationToken) -> Result<()> {
     let config = Config::from_env().context("could not load configuration")?;
-    let app_state = init(config)
+    let app = init(&config)
         .await
         .context("could not initialize app state")?;
 
-    let router = routes::router().with_state(app_state.clone());
+    let router = Router::new().merge(api::router());
 
-    let listener = TcpListener::bind(&app_state.config.http_addr)
+    #[cfg(copyright_page)]
+    let router = {
+        let html = include_str!(concat!(env!("OUT_DIR"), "/copyright.html"));
+        router.route(
+            "/copyright",
+            axum::routing::get(async move || axum::response::Html(html)),
+        )
+    };
+
+    let router = router
+        .layer(middleware::from_fn(request_tracing))
+        .with_state(app.clone());
+
+    let listener = TcpListener::bind(&config.http_addr)
         .await
-        .with_context(|| {
-            format!(
-                "could not bind HTTP listener to {}",
-                app_state.config.http_addr
-            )
-        })?;
+        .with_context(|| format!("could not bind HTTP listener to {}", config.http_addr))?;
 
     info!(http_addr = %listener.local_addr()?, "listening");
 
@@ -54,11 +60,7 @@ pub async fn run(cancel: CancellationToken) -> Result<()> {
         .await
         .context("error in HTTP server")?;
 
-    app_state
-        .vm_manager
-        .shutdown()
-        .await
-        .context("failed to shut down vm manager")?;
+    app.api_state.shutdown().await?;
 
     info!("goodbye!");
 
@@ -66,41 +68,61 @@ pub async fn run(cancel: CancellationToken) -> Result<()> {
 }
 
 #[instrument]
-async fn init(config: Config) -> Result<AppState> {
-    fs::create_dir_all(&config.state_dir)
-        .await
-        .with_context(|| {
-            format!(
-                "could not create directory '{}'",
-                config.state_dir.display()
-            )
-        })?;
+async fn init(config: &Config) -> Result<App> {
+    let api_state = Arc::new(ApiState::init(config).await?);
+    Ok(App { api_state })
+}
 
-    let vm_semaphore = Semaphore::new(config.max_running_vms);
+async fn request_tracing(req: Request, next: Next) -> Response {
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_string());
+    let method = req.method().clone();
 
-    let vm_manager = coden_vm::Manager::new(&coden_vm::ManagerOptions {
-        state_dir: config.state_dir.clone(),
-        firecracker: config.firecracker.clone(),
-        firecracker_jailer: config.firecracker_jailer.clone(),
-    })
-    .await
-    .context("could not create VM manager")?;
-
-    let vm_vmlinux = vm_manager
-        .load_resource("vmlinux", &config.vmlinux)
-        .await
-        .context("could not load vmlinux into VM manager")?;
-    let vm_rootfs = vm_manager
-        .load_resource("rootfs", &config.rootfs)
-        .await
-        .context("could not load rootfs into VM manager")?;
-
-    let inner = AppStateInner {
-        config,
-        vm_semaphore,
-        vm_manager,
-        vm_vmlinux,
-        vm_rootfs,
+    let span = {
+        let span_name = match &route {
+            Some(route) => format_args!("{} {}", req.method(), *route),
+            None => format_args!("{}", req.method()),
+        };
+        info_span!(
+            "http.request",
+            otel.name = span_name,
+            otel.kind = "server",
+            otel.status_code = field::Empty,
+            url.original = %req.uri(),
+            http.route = route,
+            http.request.body.size = req.body().size_hint().exact(),
+            http.request.method = %method,
+            http.response.body.size = field::Empty,
+            http.response.status_code = field::Empty,
+        )
     };
-    Ok(AppState(Arc::new(inner)))
+
+    let start = Instant::now();
+    let res = next.run(req).instrument(span.clone()).await;
+    let duration = start.elapsed();
+    span.record("http.response.body.size", res.body().size_hint().exact());
+    span.record("http.response.status_code", res.status().as_u16());
+    span.record(
+        "otel.status_code",
+        match res.status().is_server_error() {
+            true => "error",
+            false => "ok",
+        },
+    );
+
+    if let Some(e) = res.extensions().get::<Arc<anyhow::Error>>() {
+        error!(parent: &span, exception.message = ?e, "http.server.request.exception");
+    }
+
+    info!(
+        parent: &span,
+        histogram.http.server.request.duration = duration.as_secs_f64(),
+        http.route = route,
+        http.request.method = %method,
+        http.response.status_code = res.status().as_u16(),
+    );
+
+    res
 }

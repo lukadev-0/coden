@@ -97,7 +97,7 @@
               pkgs.cargo-about
               pkgs.e2fsprogs
             ];
-            VMLINUX = "${pkgs.coden-kernel}/kernel";
+            CODEN_KERNEL = "${pkgs.coden-kernel}/kernel";
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
             FIRECRACKER_JAILER = lib.getExe' pkgs.firecracker "jailer";
           };

@@ -29,7 +29,7 @@ use our binary cache ([lukadev.cachix.org](https://lukadev.cachix.org/))
 to avoid compiling everything.
 
 ```sh
-sudo RUST_LOG=debug nix run github:lukadev-0/coden
+sudo nix run github:lukadev-0/coden
 ```
 
 You can also acquire the required files manually, refer to
@@ -39,11 +39,14 @@ for how to download Firecracker and get a copy of the Linux kernel. Head to the
 `coden-server` binary and the `rootfs`.
 
 ```sh
-sudo VMLINUX=<vmlinux> ROOTFS=<rootfs> FIRECRACKER=<firecracker> FIRECRACKER_JAILER=<jailer> \
-    ./coden-server
+sudo CODEN_KERNEL=<kernel> \
+     CODEN_ROOTFS=<rootfs> \
+     FIRECRACKER=<firecracker> \
+     FIRECRACKER_JAILER=<jailer> \
+     ./coden-server
 ```
 
-- `<vmlinux>` is the path to the uncompressed Linux kernel
+- `<kernel>` is the path to the Linux kernel
 - `<rootfs>` is the path to the rootfs image
 - `<firecracker>` is the path to the `firecracker` executable
 - `<jailer>` is the path to the `jailer` executable (comes with Firecracker)

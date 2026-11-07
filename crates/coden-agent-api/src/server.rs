@@ -4,7 +4,6 @@ use anyhow::Result;
 use bytes::BytesMut;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tracing::instrument;
 
 use crate::io_helpers;
 
@@ -33,13 +32,12 @@ where
         io_helpers::read_json_line(&mut self.transport, &mut self.buf).await
     }
 
-    #[instrument(skip(self))]
     pub async fn send_response<Res>(&mut self, response: &Res) -> Result<()>
     where
         Res: Serialize + Debug,
     {
         io_helpers::write_json_line(&mut self.transport, &response).await?;
-        tracing::debug!("sent response");
+        tracing::debug!(?response, "sent response");
         Ok(())
     }
 }

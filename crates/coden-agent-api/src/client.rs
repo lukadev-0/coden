@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use bytes::BytesMut;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tracing::instrument;
 
 use crate::{io_helpers, schema::HasResponse};
 
@@ -26,7 +25,6 @@ impl<T> Client<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    #[instrument(name = "vm.agent.request", skip(self))]
     pub async fn request<Req>(&mut self, request: &Req) -> Result<Req::Response>
     where
         Req: HasResponse + Debug + Serialize,
@@ -41,7 +39,7 @@ where
         .flatten()
         .context("could not send request")?;
 
-        tracing::debug!("request sent");
+        tracing::debug!(?request, "request sent");
 
         let response = tokio::time::timeout(
             Duration::from_secs(30),
