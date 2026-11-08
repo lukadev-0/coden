@@ -1,7 +1,11 @@
 { pkgs, craneLib }:
 let
   inherit (pkgs) lib;
-  src = craneLib.cleanCargoSource ../..;
+  src = pkgs.runCommand "source" { } ''
+    cp -r ${craneLib.cleanCargoSource ../..} "$out"
+    chmod -R u+w "$out"
+    mkdir -p "$out/frontend/build"
+  '';
 
   commonArgs = {
     pname = "coden";

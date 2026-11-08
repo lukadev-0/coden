@@ -1,0 +1,87 @@
+@import "./reset.css";
+
+:root {
+  --color-base: hsl(140deg 11% 7%);
+  --color-on-base: hsl(0deg 0% 100%);
+  --color-on-base-dim: hsl(155deg 10% 75%);
+  --color-surface: hsl(140deg 10% 10%);
+  --color-on-surface: var(--color-on-base);
+  --color-on-surface-dim: var(--color-on-base-dim);
+  --color-container: hsl(140deg 8% 15%);
+  --color-outline: hsl(155deg 8% 30%);
+  --color-inset-subtle: hsl(155deg 80% 90% / 0.1);
+
+  --color-accent: hsl(150deg 80% 80%);
+  --color-on-accent: hsl(150deg 100% 3%);
+  --color-accent-container: hsl(150deg 30% 20%);
+
+  --color-editor-active-line: hsl(145deg 30% 80% / 0.05);
+
+  --color-code-keyword: var(--color-accent);
+  --color-code-name: hsl(220deg 80% 80%);
+  --color-code-builtin: hsl(170deg 80% 80%);
+  --color-code-number: hsl(30deg 80% 80%);
+  --color-code-comment: hsl(155deg 20% 60%);
+  --color-code-bool: hsl(80deg 80% 80%);
+  --color-code-string: hsl(45deg 80% 80%);
+
+  --font-family-body: system-ui, sans-serif;
+  --font-family-code: monospace;
+
+  --font-size-body: 1rem;
+  --font-size-sm: 0.875rem;
+
+  --border-radius: 0.375rem;
+
+  --shadow-sm: 0 1px 1px black;
+  --shadow-md: 0 2px 8px hsl(0deg 0% 0% / 0.3);
+  --shadow-ring: 0 0 1px 1px hsl(0deg 0% 0% / 0.6);
+  --shadow-inset-subtle: inset 0 0 0 1px var(--color-inset-subtle);
+
+  background-color: var(--color-base);
+  color: var(--color-on-base);
+  font-family: var(--font-family-body);
+  color-scheme: dark;
+}
+
+select {
+  --picker-padding: 0.125rem;
+
+  position: relative;
+  appearance: base-select;
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  height: 1.75rem;
+  field-sizing: content;
+  background-color: var(--color-container);
+  border: 1px solid var(--color-outline);
+  font-size: var(--font-size-sm);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+
+  &::picker-icon {
+    content: "";
+    width: 0.3rem;
+    height: 0.3rem;
+    border-right: 2px solid var(--color-on-base-dim);
+    border-bottom: 2px solid var(--color-on-base-dim);
+    transform: rotate(45deg) translateY(-25%);
+    margin: 0.125rem;
+  }
+
+  &::picker(select) {
+    appearance: base-select;
+    background: var(--color-container);
+    color: var(--color-on-base);
+    box-shadow: var(--shadow-inset-subtle), var(--shadow-ring), var(--shadow-md);
+    border: none;
+    border-radius: var(--border-radius);
+    margin-top: 0.25rem;
+    padding: var(--picker-padding);
+  }
+
+  option {
+    border-radius: calc(var(--border-radius) - var(--picker-padding));
+  }
+}

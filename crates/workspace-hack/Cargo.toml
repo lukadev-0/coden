@@ -25,6 +25,7 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
+rust-embed-utils = { version = "8", default-features = false, features = ["mime-guess"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["raw_value"] }
 slab = { version = "0.4" }
@@ -40,6 +41,7 @@ proc-macro2 = { version = "1" }
 quote = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
+rust-embed-utils = { version = "8", default-features = false, features = ["mime-guess"] }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
 

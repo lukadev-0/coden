@@ -1,5 +1,6 @@
 mod api;
 mod config;
+mod frontend;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -34,7 +35,7 @@ pub async fn run(cancel: CancellationToken) -> Result<()> {
         .await
         .context("could not initialize app state")?;
 
-    let router = Router::new().merge(api::router());
+    let router = Router::new().merge(api::router()).merge(frontend::router());
 
     #[cfg(copyright_page)]
     let router = {

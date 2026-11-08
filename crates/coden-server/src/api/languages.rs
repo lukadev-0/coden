@@ -6,6 +6,7 @@ use utoipa::{PartialSchema, ToSchema};
 
 use crate::api::ApiState;
 
+#[expect(unused)]
 #[derive(Deserialize, ToSchema)]
 pub struct Language {
     pub label: String,
@@ -17,6 +18,7 @@ pub struct Language {
     pub execute: LanguageCommand,
 }
 
+#[expect(unused)]
 #[derive(Deserialize, ToSchema)]
 pub struct LanguagePackage {
     pub name: String,

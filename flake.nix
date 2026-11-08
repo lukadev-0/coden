@@ -96,6 +96,7 @@
               pkgs.cargo-hakari
               pkgs.cargo-about
               pkgs.e2fsprogs
+              pkgs.pnpm
             ];
             CODEN_KERNEL = "${pkgs.coden-kernel}/kernel";
             FIRECRACKER = lib.getExe' pkgs.firecracker "firecracker";
