@@ -1,13 +1,15 @@
 # coden
 
-An HTTP API for running code within a virtual machine.
+A web service for running code within a virtual machine.
 
-## Development Status
+![Screenshot](.github/screenshot.png)
 
-- [x] kernel & rootfs
-- [x] spawn a Firecracker microVM
-- [x] guest agent to accept & execute commands sent by the host
-- [x] HTTP API to spawn a VM and execute the given code
+- Try it out: https://coden.lukadev.me/
+- API Documentation: https://coden.lukadev.me/docs
+
+> [!NOTE]
+> The hosted instance runs on a cheap VPS. It might not always be reliable,
+> especially if a lot of people are using it!
 
 ## How to host this?
 
@@ -32,26 +34,11 @@ to avoid compiling everything.
 sudo nix run github:lukadev-0/coden
 ```
 
-You can also acquire the required files manually, refer to
-[Firecracker's documentation](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md)
-for how to download Firecracker and get a copy of the Linux kernel. Head to the
-[releases](https://github.com/lukadev-0/coden/releases) to download the
-`coden-server` binary and the `rootfs`.
+We also provide a NixOS module:
 
-```sh
-sudo CODEN_KERNEL=<kernel> \
-     CODEN_ROOTFS=<rootfs> \
-     FIRECRACKER=<firecracker> \
-     FIRECRACKER_JAILER=<jailer> \
-     ./coden-server
+```nix
+{
+    imports = [ coden.nixosModules.default ];
+    service.coden.enable = true;
+}
 ```
-
-- `<kernel>` is the path to the Linux kernel
-- `<rootfs>` is the path to the rootfs image
-- `<firecracker>` is the path to the `firecracker` executable
-- `<jailer>` is the path to the `jailer` executable (comes with Firecracker)
-
-## Future Plans
-
-Integrate this into a website with a code editor to let users write & run code
-from the browser.
