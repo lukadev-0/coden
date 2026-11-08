@@ -48,7 +48,7 @@ We also provide a NixOS module:
 ```nix
 {
     imports = [ coden.nixosModules.default ];
-    service.coden.enable = true;
+    services.coden.enable = true;
 }
 ```
 
