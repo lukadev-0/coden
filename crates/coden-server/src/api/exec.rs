@@ -1,5 +1,3 @@
-mod languages;
-
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
@@ -201,7 +199,7 @@ pub async fn run(
     State(api_state): State<Arc<ApiState>>,
     Json(body): Json<RunBody>,
 ) -> ApiResult<Json<RunResponse>> {
-    let Some(language) = languages::get_by_id(&body.language) else {
+    let Some(language) = api_state.languages.get(&body.language) else {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "Unknown language"));
     };
 
@@ -210,21 +208,18 @@ pub async fn run(
     let machine = spawn_machine(&api_state).await?;
     machine
         .request(schema::WriteFileRequest {
-            path: language.source_file.into(),
+            path: language.source_file.clone().into(),
             contents: body.code.into(),
         })
         .await
         .context("could not write program code into VM")?;
 
-    let compiler_res = if let Some(command) = language.compile {
+    let compiler_res = if let Some(command) = &language.compile {
         Some(
             machine
                 .request(schema::ExecRequest {
-                    program: command
-                        .first()
-                        .expect("compile command should have at least one item")
-                        .to_string(),
-                    args: command.iter().skip(1).map(|s| s.to_string()).collect(),
+                    program: command.program.clone(),
+                    args: command.args.clone(),
                 })
                 .await
                 .context("could not execute compiler in VM")?,
@@ -240,17 +235,8 @@ pub async fn run(
         Some(
             machine
                 .request(schema::ExecRequest {
-                    program: language
-                        .execute
-                        .first()
-                        .expect("execute command should have at least one item")
-                        .to_string(),
-                    args: language
-                        .execute
-                        .iter()
-                        .skip(1)
-                        .map(|s| s.to_string())
-                        .collect(),
+                    program: language.execute.program.clone(),
+                    args: language.execute.args.clone(),
                 })
                 .await
                 .context("could not execute program in VM")?,

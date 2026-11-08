@@ -1,9 +1,12 @@
 mod exec;
+mod languages;
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::{Extension, Json};
 use axum::{Router, extract::FromRef, http::StatusCode};
@@ -15,6 +18,7 @@ use utoipa::{IntoResponses, OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::api::languages::Language;
 use crate::config::Config;
 
 pub struct ApiState {
@@ -26,6 +30,8 @@ pub struct ApiState {
     vm_mem_size_mib: usize,
     vm_jailer_uid: u32,
     vm_jailer_gid: u32,
+    languages: HashMap<String, Arc<Language>>,
+    languages_manifest: Bytes,
 }
 
 impl ApiState {
@@ -59,6 +65,23 @@ impl ApiState {
             .await
             .context("could not load rootfs into VM manager")?;
 
+        let languages_manifest = fs::read(&config.languages_manifest)
+            .await
+            .context("could not read languages manifest")?;
+
+        let languages_list: Vec<Language> = serde_json::from_slice(&languages_manifest)
+            .context("could not deserialize languages manifest")?;
+
+        let mut languages = HashMap::new();
+        for lang in languages_list {
+            let lang = Arc::new(lang);
+            for name in std::iter::once(&lang.name).chain(&lang.aliases) {
+                if languages.insert(name.clone(), lang.clone()).is_some() {
+                    anyhow::bail!("duplicate language name: {name}");
+                }
+            }
+        }
+
         Ok(Self {
             vm_semaphore,
             vm_manager,
@@ -68,6 +91,8 @@ impl ApiState {
             vm_mem_size_mib: config.vm_mem_size_mib,
             vm_jailer_uid: config.vm_jailer_uid,
             vm_jailer_gid: config.vm_jailer_gid,
+            languages,
+            languages_manifest: languages_manifest.into(),
         })
     }
 
@@ -91,6 +116,7 @@ where
 {
     let (mut router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(get_openapi))
+        .routes(routes!(languages::get_languages))
         .routes(routes!(exec::exec))
         .routes(routes!(exec::run))
         .split_for_parts();

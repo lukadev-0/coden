@@ -15,6 +15,7 @@ pub struct Config {
     pub vm_vcpu_count: usize,
     pub vm_mem_size_mib: usize,
     pub max_running_vms: usize,
+    pub languages_manifest: PathBuf,
 }
 
 impl Config {
@@ -58,6 +59,7 @@ impl Config {
             vm_vcpu_count: parse_env_option("CODEN_VM_VCPU_COUNT")?.unwrap_or(1),
             vm_mem_size_mib: parse_env_option("CODEN_VM_MEM_SIZE_MIB")?.unwrap_or(20),
             max_running_vms: parse_env_option("CODEN_MAX_RUNNING_VMS")?.unwrap_or(8),
+            languages_manifest: from_env_os("CODEN_LANGUAGES_MANIFEST")?,
         })
     }
 }

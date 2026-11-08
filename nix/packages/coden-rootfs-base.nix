@@ -1,21 +1,36 @@
 {
+  lib,
+  callPackage,
   runCommand,
   writeClosure,
   buildEnv,
   squashfsTools,
+  jq,
   busybox,
-  gcc,
-  python3,
-  rustc,
   additionalPackages ? [ ],
 }:
 let
+  languages = callPackage ../languages { };
+  languagePackages = lib.map (lang: lang.package) languages;
+  languagesManifest = lib.map (lang: {
+    inherit (lang)
+      label
+      name
+      aliases
+      compile
+      execute
+      ;
+    source_file = lang.sourceFile;
+    package = {
+      name = lang.packageName;
+      inherit (lang.package) version;
+    };
+  }) languages;
+
   envPackages = [
     busybox
-    gcc
-    python3
-    rustc
   ]
+  ++ languagePackages
   ++ additionalPackages;
 
   rootfsEnv = buildEnv {
@@ -29,11 +44,14 @@ let
 in
 runCommand "rootfs"
   {
-    inherit rootfsEnv;
+    inherit rootfsEnv languagesManifest;
     __structuredAttrs = true;
     unsafeDiscardReferences.out = true;
     closure = writeClosure envPackages;
-    nativeBuildInputs = [ squashfsTools ];
+    nativeBuildInputs = [
+      squashfsTools
+      jq
+    ];
   }
   ''
     sourceFiles=()
@@ -53,6 +71,7 @@ runCommand "rootfs"
     done
 
     mkdir -p "$out"
+    jq --compact-output .languagesManifest "$NIX_ATTRS_JSON_FILE" > "$out/languages.json"
     mksquashfs "''${sourceFiles[@]}" "$out/rootfs" \
       -no-strip -force-uid 0 -force-gid 0 -repro -info -pseudo-override \
       -comp zstd -Xcompression-level 15 \

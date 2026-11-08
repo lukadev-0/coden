@@ -26,4 +26,7 @@ sudo cp "$rootfs_base/rootfs" "$mountpoint/base.img"
 sudo cp "$busybox_static/bin/busybox" "$scripts_dir/init" "$mountpoint/bin"
 sudo umount "$mountpoint"
 
+cp "$rootfs_base/languages.json" "$tmp_dir"
+chmod 644 "$tmp_dir/languages.json"
+
 "$scripts_dir/update-local-rootfs"
